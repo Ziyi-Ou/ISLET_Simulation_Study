@@ -1,0 +1,1142 @@
+---
+title: "ISLET solve function"
+author: "Ziyi Ou"
+date: "2024-10-17"
+
+output: 
+  rmarkdown::html_document:
+    theme: journal
+    highlight: tango
+    toc: true
+    toc_float: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+
+```{r rm}
+rm(list=ls())
+setwd("/Users/ziyiou/CUHKSZ/23 Fall/Genomics/longitudinal analysis/2024.10.15/EM algorithm")
+#library(GEOquery)
+```
+
+```{r load packages, warning=FALSE, message=FALSE}
+library(SummarizedExperiment)
+library(SingleCellExperiment)
+library(GEOquery)
+library(ISLET)
+library(Seurat)
+library(MuSiC)
+library(dplyr)
+library(ggplot2)
+library(tidyr)
+library(fgsea)
+library(Matrix)
+library(pheatmap)
+library(stringr)
+library(gridExtra)
+library(reshape2)
+library(biomaRt)
+library(linseed)
+library(DWLS)
+library(FARDEEP)
+library(MCMCpack)
+library(PROPER)
+library(edgeR)
+library(MASS)
+library(grid)
+library(pROC)
+library(ROCR)
+library(DESeq2)
+```
+
+
+# 1. Parameter Estimation
+
+```{r real mdata, warning=FALSE}
+################ meta data ################
+real_gene_count = readRDS("real_gene_count.rds")
+real_pdata = readRDS("real_pdata.rds")
+
+real_meta_data <- data.frame(group = ifelse(real_pdata$`diseasestatus:ch1` == "Healthy Control", "ctrl", 
+                      "case"),
+                      subject_ID = as.numeric(real_pdata$`donorid:ch1`),
+                      age = as.numeric(real_pdata$`age:ch1`),
+                      cellType = real_pdata$`celltype:ch1`)
+rownames(real_meta_data) <- real_pdata$geo_accession
+
+
+# 去除细胞类型为"Whole Blood"的样本
+filtered_meta_data <- subset(real_meta_data, cellType != "Whole Blood")
+filtered_gene_count <- real_gene_count[colnames(real_gene_count) %in% rownames(filtered_meta_data), ]
+
+# 确保行名的顺序匹配
+filtered_gene_count <- filtered_gene_count[, rownames(filtered_meta_data)]
+
+
+ctrl_meta_data <- subset(filtered_meta_data, group == "ctrl")
+case_meta_data <- subset(filtered_meta_data, group == "case")
+
+ctrl_gene_count <- filtered_gene_count[, rownames(ctrl_meta_data)]
+case_gene_count <- filtered_gene_count[, rownames(case_meta_data)]
+
+ctrl_gene_count <- ctrl_gene_count
+################ 
+
+```
+
+We use `DESeq2` to do the parameter estimation.
+
+We get the mean expression of gene and perform log translation to it, save it as `mu_m.rds`.
+
+In the reference panel, we assume the mean expression of gene $g$ for subject $j$ at time follows $N(\mu _m, \sigma_m^2)$, where $\sigma_m$ is estimated by `estimateDispersions` function in `DESeq2`. We save it as `var_m.rds`.
+
+```{r deseq2,warning=FALSE}
+dds <- DESeqDataSetFromMatrix(countData = ctrl_gene_count,
+                              colData = ctrl_meta_data,
+                              design = ~ 1)
+dds
+
+dds1 <- DESeq(dds)
+res <- results(dds1)
+res
+
+dds <- estimateSizeFactors(dds)
+dds <- estimateDispersions(dds)
+plotDispEsts(dds)
+head(dispersions(dds))
+```
+
+
+```{r calculate variance dispersion and mean, eval=FALSE}
+mu_m <- data.frame(res$baseMean)
+#mu_m <- log(mu_m)
+rownames(mu_m) <- rownames(ctrl_gene_count)
+
+dispersion_m <- data.frame(dispersions(dds))
+rownames(dispersion_m) = rownames(dispersion_m)
+
+
+# 标记 mu_m 中包含 -Inf 的行
+non_inf_rows <- rowSums(mu_m == -Inf) == 0
+
+# 标记 var_m 中包含 NA 的行
+non_na_rows <- rowSums(is.na(dispersion_m)) == 0
+
+# 取交集：同时满足 non_inf_rows 和 non_na_rows 的行
+valid_rows <- non_inf_rows & non_na_rows
+gene <- rownames(mu_m)[valid_rows]
+
+# 筛选出 mu_m 和 var_m 中保留的行
+mu_m_filtered <- mu_m[valid_rows, ]
+dispersion_m_filtered <- dispersion_m[valid_rows, ]
+
+mu_m <- data.frame(mu_m_filtered)
+rownames(mu_m) = gene
+mu_m <- head(mu_m, 5000)
+
+dispersion_m <- data.frame(dispersion_m_filtered)
+rownames(dispersion_m) = gene
+dispersion_m <- head(dispersion_m, 5000)
+
+var_m = 1/mu_m + dispersion_m
+```
+
+
+In `DESeq2`, variance $\sigma^2 = \mu + \alpha\mu^2$, here $\mu$ is mean and $\alpha$ is the dispersion. Since in the following simulation we simulate count in log scale, and by Taylor Expansion we know that $log(X) ≈ log(\mathbb{E}[X])+ \mathbb{E}[X] (X−\mathbb{E}[X])$, therefore $\mathrm{Var}[log(X)] = \displaystyle \frac{\mathrm{Var}[X]}{\mathbb{E}^2[X]}$
+
+```{r save RDS, eval=FALSE}
+saveRDS(log(mu_m), file="mu_m.rds")
+saveRDS(dispersion_m, file = "dispersion_m.rds")
+saveRDS(var_m, file = "var_m.rds")
+```
+
+```{r load params, warning=FALSE}
+mu_m = readRDS("mu_m_500.rds")
+mu_m = mu_m$mu_m_filtered
+sigma_m = readRDS("var_m_500.rds")
+
+cellType_list = c("B-cells", "CD4", "CD8", "NK", "Neutrophils", "Monocytes")
+gene_list = rownames(sigma_m)
+```
+
+
+
+# 2. Temporal cell type proportions
+
+We assume the proportion $\theta_{jt}$ of each subject $j$ for $K$ cell types at time $t$ follows Dirichlet distribution with parameter $\alpha$, where $\alpha$ and   $\theta_{jt}$ are both $K \times 1$ vectors, $\mathbf{1}^T\theta_{jt} = 1$.
+
+```{r Temporal cell type proportions}
+################# Notation Setup #################
+
+#### input ####
+# J: number of subject (must be an even number)
+# T: number of time point (must be an even number)
+# alpha_ls: cell population composition parameters for Dirichlet dist.  (list(alpha_c, alpha_d))
+# cell_ls: list of cell types
+
+#### output ####
+# theta: cell type proportion
+
+#### This `Gen_prop` function is for generating cell type proportion
+
+Gen_prop <- function(J, T, alpha_ls, cell_ls) {
+  set.seed(123)
+  alpha_c = alpha_ls[["alpha_c"]]  # Dirichilet distribution params for control group
+  alpha_d = alpha_ls[["alpha_d"]]  # Dirichilet distribution params for case group
+  
+  ctrl_theta <- rdirichlet(n=J*T/2, alpha = alpha_c)
+  case_theta <- rdirichlet(n=J*T/2, alpha = alpha_d)
+  
+  colnames(ctrl_theta) <- cell_ls
+  colnames(case_theta) <- cell_ls
+  rownames(case_theta) <- seq(from = 1, to = J * T / 2) # in accordance with sample_ID in metadata
+  rownames(ctrl_theta) <- seq(from = J * T / 2 + 1, to = J * T)
+  
+  theta <- rbind(case_theta, ctrl_theta) # case is on the top
+  
+  return(theta = t(theta)) 
+  # transpose: let theta be a n*K matrix (n is the number of samples)
+}
+```
+
+In the paper, author provided us with the parameter value for the Dirichlet distribution:
+
+$$\alpha_c = (8.85, 6.49, 5.98, 5.28, 4.22, 3.85)$$
+$$\alpha_d = (1.90, 2.25, 2.10, 5.72, 7.33, 15.37)$$
+
+```{r example of prop}
+ctrl_alpha <- c(8.85, 6.49, 5.98, 5.28, 4.22, 3.85) # ctrl group
+case_alpha <- c(1.90, 2.25, 2.10, 5.72, 7.33, 15.37) # case group
+alpha_list = list(alpha_c = ctrl_alpha, alpha_d = case_alpha)
+
+theta = Gen_prop(J=50, T=5, alpha_ls = alpha_list, cell_ls = cellType_list)
+theta[, 1:5]
+```
+
+# 3. Individual reference panel and temporal gene expression
+
+![](/Users/ziyiou/CUHKSZ/23 Fall/Genomics/longitudinal analysis/figure/islet framework.png) 
+
+![](/Users/ziyiou/CUHKSZ/23 Fall/Genomics/longitudinal analysis/figure/simulation study design.jpg)
+
+
+For gene $g$, the mean expression of cell type $k$ per subject $j$ at time $t$ is $M_{gjkt} \sim N(\mu^{t_j}_k, \sigma_g^2)$ ($\sigma_g$ is the overdispersion of each gene estimated by `DESeq2`). 
+
+The true reference matrix is $\lambda_{gjkt} \sim \Gamma(\mathrm{exp}(-\Phi_{gjk}),  M_{gjkt}\mathrm{exp}(\Phi_{gjk}))$, where $M_{gjkt}$ and $\Phi_{gjk}$ are components in vector $\mathbf{M_{gjt}}, \mathbf{\Phi_{gj}}$, and $\mathrm{exp}(-\Phi_{gjk})$ is shape, $M_{gjkt}\mathrm{exp}(\Phi_{gjk})$ is scale. ($\Phi_{gjk} \sim N(-3, 1)$).
+
+Note that $M_{gjkt}$ and $\Phi_{gjk}$ are both in **log** scale.
+
+
+## (1) Main Function
+
+```{r generate matrix}
+control_matrix <- function(cell_ls, gene_ls, DEG_ls, mu_jt, delta_jt) {
+  G = length(gene_ls) # number of genes
+  K = length(cell_ls)
+  
+  
+  control <- matrix(0, nrow = G, ncol = K)
+  colnames(control) = cell_ls
+  rownames(control) = gene_ls
+  
+  for (k in 1:K) {
+    deg_indices = DEG_ls[[cell_ls[k]]]$Type3
+    control[deg_indices, ] = delta_jt  # k*delta_jt
+  }
+  
+  control = control + mu_jt
+  
+  return(control)
+  
+}
+
+case_matrix <- function(cell_ls, gene_ls, DEG_ls, mu_jt, delta_jt) {
+  G = length(gene_ls) # number of genes
+  K = length(cell_ls)
+  
+  
+  case <- matrix(0, nrow = G, ncol = K)
+  colnames(case) = cell_ls
+  rownames(case) = gene_ls
+  
+  for (k in 1:K) {
+    deg_indices = DEG_ls[[cell_ls[k]]]$Type3
+    case[deg_indices, ] = delta_jt # k*delta_jt
+    case[deg_indices, k] = 0
+  }
+  
+  case = case + mu_jt
+  
+  return(case)
+  
+}
+```
+
+
+
+```{r Generation reference}
+################# Notation Setup #################
+
+#### input ####
+# J: number of subject (must be an even number)
+# T: number of time point (must be an even number)
+# mu_m
+# sigma_m
+# gene_ls: list of gene names
+# cell_ls: list of cell types
+# Delta_0 (LFC): age-independent group effect (intercept)
+# k_mu: slope in baseline group
+# k_delta: age-dependent group effect (slope)
+
+#### output ####
+# M: mean expression of gene
+# Phi: overdispersion
+# DEG_ls: list of differentially expressed genes (list(Type1, Type2, Type3))
+# lambda: true reference expression
+# meta_data
+
+#### This `Gen_ref` function is for generating longitudinal individual reference panel
+
+Gen_ref <- function(J, T, mu_m, sigma_m,
+                       gene_ls, cell_ls, LFC=1.5, k_mu = 0.01, k_delta = 0.1) {
+  set.seed(123) 
+  
+  ### meta data
+  meta_data <- data.frame(sample_ID = 1:(J*T),
+                          group = rep(c("case", "ctrl"), each = T*J/2), 
+                          subject_ID = rep(1:J, each=T), 
+                          time_point = rep(1:T, J))
+  
+  
+  
+  ### marker gene index generation
+  G = length(gene_ls) # number of genes
+  K = length(cell_ls)
+  
+  sample_size <- ceiling(0.05 * G) # 5% DEG of each cell type
+  DEG_ls <- setNames(vector("list", length(cell_ls)), cell_ls)
+  
+  for (k in 1:K) {
+    
+    DEG_ls[[cell_ls[k]]] = list(
+      Type3 = seq(((k-1)*sample_size)+1, (k*sample_size))) }
+  
+
+  ### reference panel generation
+  mu_m = matrix(rep(mu_m, times = K), nrow = G, ncol = K)
+  rownames(mu_m) = gene_ls
+  colnames(mu_m) = cell_ls
+  
+  sigma_m = data.frame(rep(sigma_m, each=K))
+  rownames(sigma_m) = gene_ls
+  colnames(sigma_m) = cell_ls
+  
+  ### Generate M
+  M_ls = list()
+  shift = ceiling(T/2) 
+  
+  for  (j in (1:(J %/% 2))){ 
+    mu_jt = mu_m
+    delta_jt = LFC
+    for (t in (1:T)) { # linear 
+      #if (t %in% (1:shift)) {mu_m_case = mu_m_case + Delta3}
+      #else {mu_m_case = mu_m_case - Delta3}
+      mu_jt = mu_jt + k_mu*t
+      delta_jt = delta_jt + k_delta*t
+      mu_m_case = case_matrix(cell_ls = cell_ls, gene_ls = gene_ls, DEG_ls = DEG_ls, mu_jt = mu_jt, delta_jt = delta_jt)
+      M <- mapply(rnorm, n = 1, mean = mu_m_case, sd = sigma_m)
+      M <- matrix(M, nrow = nrow(mu_m_case), ncol = ncol(mu_m_case), 
+             dimnames = dimnames(mu_m_case))
+    
+    # current idx: (j-1)*T + t
+      M_ls[[as.character((j - 1) * T + t)]] <- M
+
+   }
+  }
+  
+  for  (j in (((J %/% 2)+1):J)){ 
+    mu_jt = mu_m
+    delta_jt = LFC
+    for (t in (1:T)) { 
+      mu_jt = mu_jt + k_mu*t
+      delta_jt = delta_jt + k_delta*t
+      mu_m_ctrl = control_matrix(cell_ls = cell_ls, gene_ls = gene_ls, DEG_ls = DEG_ls, mu_jt = mu_jt, delta_jt = delta_jt)
+      M <- mapply(rnorm, n = 1, mean = mu_m_ctrl, sd = sigma_m)
+      M <- matrix(M, nrow = G, ncol = K, 
+             dimnames = dimnames(mu_m_ctrl))
+    
+    # current idx: (j-1)*T + t
+      M_ls[[as.character((j - 1) * T + t)]] <- M
+
+    }
+  }
+  
+  ## Generate Phi
+  Phi_ls = list()
+  for (j in 1:J) {
+    for (t in 1:T) {
+    # 生成 Phi 矩阵
+    Phi <- mapply(rnorm, n = G*K, mean = -3, sd = 1) 
+    Phi <- matrix(Phi, nrow = G, ncol = K, 
+             dimnames = dimnames(mu_m_ctrl))
+    Phi_ls[[as.character((j - 1) * T + t)]] <- Phi }
+    }
+  
+  ## Generate lambda
+  lambda_ls = list()
+  for  (j in (1:J)){ 
+    for (t in (1:T)){
+      idx = (j - 1) * T + t
+      M = M_ls[[as.character(idx)]]
+      Phi = Phi_ls[[as.character(idx)]]
+      lambda <- matrix(nrow = nrow(M), ncol = ncol(M))
+      
+      shape_matrix <- exp(-Phi)
+      rate_matrix <- 1 / (exp(M) * exp(Phi))
+      
+      lambda <- mapply(function(shape, rate) {
+          if (shape <= 0 || rate <= 0) {
+            return(0)} else {
+    return(rgamma(n = 1, shape = shape, rate = rate))}}, 
+    as.vector(shape_matrix), as.vector(rate_matrix))
+      
+      # reorganize lambda into a matrix
+      lambda <- matrix(lambda, nrow = nrow(M), ncol = ncol(M))
+      lambda[lambda > 20000] <- 20000
+      colnames(lambda) = colnames(M)
+      rownames(lambda) = rownames(M)
+      
+      lambda_ls[[as.character(idx)]] <- lambda
+    }
+  }
+  
+  
+  return (list(DEG_ls = DEG_ls, M_ls = M_ls, Phi_ls = Phi_ls, lambda_ls=lambda_ls, meta_data = meta_data))
+}
+
+```
+
+
+## (2) Heatmap Function
+
+```{r draw heatmap}
+
+create_heatmap_grob <- function(M, title, color_palette) {
+  pheatmap_obj <- pheatmap(M,
+                           cluster_rows = FALSE,
+                           cluster_cols = FALSE,
+                           show_rownames = FALSE,
+                           show_colnames = TRUE,
+                           color = colorRampPalette(c("blue", "white", "red"))(100),
+                           main = title,
+                           silent = TRUE)  # silent=TRUE 以避免直接打印
+  
+  grid_plot <- pheatmap_obj$gtable
+  return(grid_plot)
+}
+
+```
+
+# 4. Mixture-cell expression
+
+The observed bulk RNA-seq raw counts for gene g in subject j measured at time point t is generated from Poisson distribution $Y_{gjt} \sim Pois(\tilde{\lambda}_{gjt})$, where $\tilde{\lambda}_{gjt} = \lambda_{gtj}^T\theta_{gjt}$, $\lambda_{gtj}^T = (\lambda_{gjt1}, ..., \lambda_{gjtK})$
+
+```{r Mixture-cell expression}
+################# Notation Setup #################
+
+#### input ####
+# lambda_ls: cell-type-specific reference
+# theta: cell-type proportion
+
+#### output ####
+# Y: bulk RNA-seq raw counts
+
+#### This `Gen_mix` function is for generating mixture-cell expression
+
+Gen_mix <- function(lambda_ls, theta) {
+  n = length(lambda_ls) # the number of samples (J*T)
+  G = nrow(lambda_ls[[1]]) # the number of genes
+  K = ncol(lambda_ls[[1]]) # the number of cell types
+  
+  Y = matrix(nrow = G, ncol = n)
+  
+  for (i in 1:n) {
+    mean_value = lambda_ls[[i]] %*% theta[, i]
+    Y[, i] = rpois(G, lambda = mean_value)
+  }
+  
+  colnames(Y) = colnames(theta)
+  rownames(Y) = rownames(lambda_ls[[1]])
+  
+  return (Y = Y)
+}
+```
+
+# 5. Solve function
+
+## 5.1 utils function
+
+
+```{r utils}
+###function to obtain sum of squares
+ss<-function(x){
+  a<-sum(x^2)
+  return(a)
+}
+
+###function to obtain sum of squares
+colss<-function(x){
+    a<-colSums(x^2)
+    return(a)
+}
+
+###function to make the design matrix [A] for random effect
+#updated on 05/31/2022 to reflect the change in ID order
+#user should sort their data by subject ID
+#makea <- function(onectprop, ind_id = sub_id, datX = X, aNU = NU){
+makea <- function(onectprop, ind_id, datX , aNU){
+   lp <- split(onectprop, ind_id)
+  a1 <- matrix(0, nrow=nrow(datX), ncol=aNU)
+#  ct_sub=table(sub_id)[as.character(unique(sub_id))]
+#  lp=lp[names(ct_sub)]
+  chk <- unique(ind_id) #chk should have the length of NU
+  lp<-lp[as.character(chk)]
+  count <- rep(0, length(chk))
+  for(i in seq_len(aNU)){
+    tmp <- sum(ind_id == chk[i])
+    count[i] <- tmp
+  }
+
+  for(i in seq_len(aNU)){
+    s <- 1+sum(count[0:(i-1)])
+    e <- sum(count[seq_len(i)])
+    a1[s:e, i] <- lp[[i]]
+  }
+  return(a1)
+}
+
+
+LRT<-function(llk_f, llk_0, df){
+    test.stat<-llk_f-llk_0
+    p<-pchisq(as.numeric(test.stat), df, lower.tail=FALSE)
+    return(p)
+}
+
+
+#clexp<-function(){
+#    #clusterExport(cl, list('colss'))
+#    clusterEvalQ(cl,  {
+#        library(Matrix)})
+#}
+
+
+
+### imply add
+# used for lme formulation set-up
+lme_fml <- function(prop.i){
+  cell_type_columns <- colnames(prop.i)
+  prop_gp_columns <- paste0("Prop.gp.", cell_type_columns)
+  formula_str <- "y ~ 0"
+  for (i in seq_along(cell_type_columns)) {
+    formula_str <- paste0(formula_str," + ", cell_type_columns[i], " + (0 + ",
+                          cell_type_columns[i], " | subject_ID)")
+  }
+  formula_str <- paste0(formula_str, " + ",
+                        paste(prop_gp_columns, collapse = " + "))
+  return(formula_str)
+}
+
+lmer_deconv <- function(i,RNAseq_final_count,input,N.total,K,formula_str){
+  y <- as.matrix(RNAseq_final_count)[i,] # fit for each gene independently
+  input <- cbind(input, y)
+
+  control <- lmerControl( check.conv.singular = "ignore")
+  res <- lmer(formula = formula_str, data = input, control = control)
+  re <- ranef(res)$subject_ID
+  feout <- fixef(res)
+  fe <- matrix(rep(feout,each=N.total),nrow=N.total)
+  colnames(fe) <- names(feout)
+  outcome_nodup <- unique(subset(input,select = c(2:1)))
+  re <- re[match(outcome_nodup$subject_ID, rownames(re)),]
+  #pull out main effect
+  ref_pred_main <- fe[,seq_len(K)]+re
+  #pull out interaction; some columns might drop out due to rank dificiency;
+  #therefore need further manipulation
+  ref_pred_intact <- fe[,-(seq_len(K))]*outcome_nodup$group
+  intact.name <- strsplit(colnames(ref_pred_intact), "[.]")
+  colnames(ref_pred_intact) <- vapply(intact.name, tail,
+                                      FUN.VALUE = character(1), n = 1)
+
+  #add up main and interaction coeeficients
+  ref_pred <- ref_pred_main
+  mcol <- match(colnames(ref_pred_intact),colnames(ref_pred_main))
+  ref_pred[,mcol] <- ref_pred[,mcol]+ref_pred_intact
+
+  ref_pred[ref_pred < 0] <- 0
+  return(as.data.frame(ref_pred))
+}
+```
+
+## 5.2 islet.est
+
+
+```{r islet.est}
+###function to implement EM algorithm by block of genes in ISLET algorithm
+#function here for unix and windows, using lapply, no parallel computing
+#Y is a GxN matrix for gene expression
+islet.solve.block.revise <-function(Y, datuse){
+    #exp_case = as.matrix(datuse@exp_case)
+    #exp_ctrl = as.matrix(datuse@exp_ctrl)
+    X <- datuse@X
+    A <- datuse@A
+    K <- datuse@K
+    NU <- datuse@NU
+    NS <- datuse@NS
+#    para<-datuse@para
+
+    #initialization of parameters parameter estimation storage
+    B_est<-NULL
+    Sig0_est <- NULL
+    SigU_est <- NULL
+    E_U_est <- NULL
+    llk <- NULL
+    ##
+    Y<-t(Y)
+    G<-ncol(Y)
+    #  Y=log2(Y+1)
+
+    ####1. Initialization of parameters
+    #1.1 cell type profiles AND csDE B parameters
+    #B_0 = solve(X,Y)
+    B_0 <- Matrix::tcrossprod( Matrix::tcrossprod(solve( Matrix::crossprod(X)), X), t(Y))
+
+    #1.2 error terms
+    # sig <- mean((Y-X%*%B_0)^2)
+    sig <- colMeans((Y-X%*%B_0)^2)
+    #sig <- 20
+
+    #1.3 missing values
+    U_0 <- rep(0, NU*K)
+
+    B_t <- B_0
+    #sig_t = rep(sig, 7)
+    U_t <- U_0
+    #sig0_t <- rep(sig, G)
+    #sigK_t <- rep(sig, K)
+    sig0_t <- sig #rep(sig, G)
+    sigK_t <- matrix(rep(sig, each=K), nrow=K)
+
+
+    iem <- 1
+    diff1 <- 100
+    B_change_val <- 100
+    diff2 <- 100
+    pp <- 1
+
+
+    #Sig_U = diag(rep(sigK_t, each = NU))
+    Sig_p<-lapply(seq_len(G), function(x, A, sig0_t, sigK_t, NU, Y, X, B_t){
+        invSig_U<-Matrix::bdiag(diag(rep(1/sigK_t[, x], each=NU)))
+        Sig<-solve( Matrix::crossprod(A)/sig0_t[x]+invSig_U)
+        U<- Matrix::tcrossprod( Matrix::tcrossprod(Sig, A),
+                                BiocGenerics::t(Y[, x] - Matrix::tcrossprod(X,
+                               BiocGenerics::t(B_t[, x])))
+                               )/sig0_t[x]
+        return(list(Sig=Sig, U=U))
+    }, A, sig0_t, sigK_t, NU, Y, X, B_t)
+    E_Up<-do.call(cbind, lapply(Sig_p, function(x)x$U))
+    
+    tolerance_diff1 <- 1e-5  
+    tolerance_diff2 <- 1e-5 
+    max_iterations <- 500
+
+
+    while(iem <= max_iterations && (B_change_val > tolerance_diff1 || diff2 > tolerance_diff2)){
+#        cat("iteration=", iem, "\n")
+        iem <- iem + 1
+        ####2. E-step
+        #observed data COV(Y) = V
+
+        #V = A%*%Sig_U%*%t(A) + diag(rep(sig0_t, 5*600))
+
+        #2.1 E[U|Y]: missing data [U|Y] given observed data
+        #invV = solve(V)
+        # E_U = mu_p = t(Sig_U) %*% t(A) %*% invV %*% (Y - X %*% B_t)
+        # Sig_p = Sig_U - crossprod(Sig_U,t(A)) %*% invV %*% A %*% Sig_U
+
+        # Estimate from last iteration
+
+        E_U <- E_Up
+        mu_p <- E_Up
+        E_U_frame <- as.data.frame(as.matrix(E_U))
+        #2.2 E[t(S)S|Y]
+        E_StS <- lapply(seq_len(G), function(x, A, Sig_p, mu_p, X, B_t, Y){
+           sum( Matrix::diag(Matrix::tcrossprod( Matrix::tcrossprod(A, Sig_p[[x]]$Sig), A))) +
+                sum(( Matrix::tcrossprod(A, BiocGenerics::t(mu_p[, x])) +
+                          Matrix::tcrossprod(X, BiocGenerics::t(B_t[, x])) - Y[, x])^2)},
+           A, Sig_p, mu_p, X, B_t, Y)
+        E_StS <-unlist(E_StS)
+
+        #2.3 E[U_k^T U_k|Y]
+        mutra_split <- lapply(Sig_p, function(x){
+            sig_p<-split(diag(x$Sig), ceiling(seq_len(NU*K)/NU))
+            tra<-unlist(lapply(sig_p, sum))
+            return(tra)
+        })
+        mu_split <- split(E_U_frame, ceiling(seq_along(E_U_frame[, 1])/NU))
+
+        E_UkTUk <- do.call('cbind', mutra_split) + do.call('rbind', lapply(mu_split, colss))
+
+        ####3. M-step
+        #3.1 B
+        B_tp <-  Matrix::tcrossprod( Matrix::tcrossprod(solve( Matrix::crossprod(X)), X),
+                                     BiocGenerics::t(Y- Matrix::tcrossprod(A, BiocGenerics::t(E_U))) )
+
+        #make correction in case B[1:K]<0 or B_tp[(K+1):2K]<0
+        #important to bound the estimation to positive values
+
+        # B_tp[1:K,]=ifelse(B_tp[1:K,]<0,0,B_tp[1:K,])
+        # B_tp[-(1:K),]=ifelse(B_tp[1:K,]+B_tp[-(1:K),]<0,-B_tp[1:K,],B_tp[-(1:K),])
+
+
+        #3.2 sigma_0^2
+        sig0_tp <- E_StS/(NS)
+
+        #3.3 sigma_k^2
+        sigK_tp <- E_UkTUk/(NU)
+
+        ####4. Stopping criteria
+        diff1 <- sum(abs(B_tp - B_t)) + abs(sig0_tp - sig0_t) + sum(abs(sigK_tp - sigK_t))
+        #cat("Fixed effect diff1=", diff1, "\n") #
+        
+
+
+        n1 <- sum(abs(B_tp - B_t))/length(B_tp)
+        n2 <- sum(abs(B_tp))/length(B_tp)
+        pp <- n1/n2
+#        cat("B_sum_val=", n2, "\n")
+#        cat("B_change_val=", n1, "\n")
+#        cat("B_change_prop=", pp*100,"% \n")
+
+        ####5. Update params
+        B_t<-B_tp
+        sig0_t <- sig0_tp
+        sigK_t <- sigK_tp
+
+        Sig_p<-lapply(seq_len(G), function(x, A, sig0_t, sigK_t, NU, Y, X, B_t){
+            Sig_U<- Matrix::bdiag(diag(rep(sigK_t[, x], each=NU)))
+            invSig_U<-Matrix::bdiag(diag(rep(1/sigK_t[, x], each=NU)))
+            Sig<-solve( Matrix::crossprod(A)/sig0_t[x]+invSig_U)
+            U<- Matrix::tcrossprod(Matrix::tcrossprod(Sig, A),
+                                   t(as.matrix(Y[, x] -
+                                    Matrix::tcrossprod(X, BiocGenerics::t(B_t[, x]))))
+                                   )/sig0_t[x]
+            return(list(Sig_U=Sig_U, Sig=Sig, U=U))
+        }, A, sig0_t, sigK_t, NU, Y, X, B_t)
+        Sig_p_all<-NULL
+        E_Up<-do.call(cbind, lapply(Sig_p, function(x)x$U))
+
+        diff2 <- sum(abs(E_Up - E_U))/length(E_U) #*mean(colMeans(Y))^2)
+       # cat("Random effect diff2=", diff2, "\n") #
+
+    }
+    # Estimate of fixed effect
+    B_est<-cbind(B_est, B_t)
+    # Estimate of random effect
+    E_U_est<-cbind(E_U_est, E_Up)
+    # Estimate of variance Sigma_U,  Sigma_0
+    Sig0_est <- cbind(Sig0_est, sig0_t)
+    SigU_est <- cbind(SigU_est, sigK_t)
+
+    #calculate LLK
+    llk<-lapply(seq_len(G), function(x){
+        Sig<- Matrix::tcrossprod( Matrix::tcrossprod(A, Sig_p[[x]]$Sig_U),  A)+
+            Matrix::bdiag(diag(sig0_t[x], nrow = nrow(A)))
+        l<- Matrix::determinant(Sig)$modulus+
+            Matrix::tcrossprod(Matrix::crossprod(Y[, x]-
+                      Matrix::tcrossprod(X, BiocGenerics::t(B_t[, x])), solve(Sig)),
+                      BiocGenerics::t(Y[, x]-
+                           Matrix::tcrossprod(X, BiocGenerics::t(B_t[, x]))) )
+        return(-as.numeric(l))
+    })
+
+    llk<-unlist(llk)
+
+
+    #compile return list
+    case.m <- B_est[seq_len(K), ]+B_est[K+seq_len(K), ]
+    ctrl.m <- B_est[seq_len(K), ]
+
+    #(2) the individual value for case and control, for all cell types. 2 matrices of NU by K.
+    rel <- split(as.data.frame(as.matrix(E_U_est)), ceiling(seq_along(E_U_est[, 1])/NU))
+    
+    case.u <- lapply(seq_len(K), function(k){rel[[k]][seq_len(datuse@case_num), ]})
+    ctrl.u <- lapply(seq_len(K), function(k){rel[[k]][seq_len(datuse@case_num), ]})
+    names(case.u) <- names(rel)
+    names(ctrl.u) <- names(rel)
+
+
+    case.indv <- lapply(seq_len(K), function(k){rel[[k]][seq_len(datuse@case_num), ] +
+            matrix(rep(case.m[k, ], each=datuse@case_num), nrow=datuse@case_num)})
+    ctrl.indv <- lapply(seq_len(K), function(k){rel[[k]][-seq_len(datuse@case_num), ] +
+            matrix(rep(ctrl.m[k, ], each=datuse@ctrl_num), nrow=datuse@ctrl_num)})
+    names(case.indv) <- names(rel)
+    names(ctrl.indv) <- names(rel)
+
+    #(3) Variance for K cell types. 1 vector of length K.
+    #'SigU_est' is already to be rendered.
+
+    #(4) Variance for grand residuals. 1 scalar.
+    #'Sig0_est' is already to be rendered.
+
+    #(5) the model likelihood. 1 scalar.
+    #'llk' is already to be rendered.
+    #'
+    cat("iteration=", iem, "\n")
+    cat("B_change_val:", B_change_val, "\n")
+    cat("U_change_val:", diff2, "\n")
+
+    #compile return list
+    rval <- list(
+        case.m=case.m,
+        ctrl.m=ctrl.m,
+        case.indv=case.indv,
+        ctrl.indv=ctrl.indv,
+        var.k=SigU_est,
+        var.0=Sig0_est,
+        LLK=llk,
+        rel = rel,
+        case.u = case.u,
+        ctrl.u = ctrl.u)
+    return(rval)
+
+    message("Complete: parameter estimation from ISLET is complete.")
+}
+```
+
+## 5.3 islet.solve
+
+```{r islet.solve.test}
+###function to run ISLET, using parallel computing
+
+isletSolve.revise <-function(input, BPPARAM=bpparam() ){
+    # islet.solve only runs on the model without age effect.
+    if(input@type == 'slope'){
+        stop('Input should be prepared by dataPrep()')
+    }
+
+
+    #make Yall a list
+    G <- nrow(input@exp_case)
+    Yall<-as.matrix(cbind(input@exp_case, input@exp_ctrl))
+    aval.nworkers<-BPPARAM$workers
+    block.size<-max(ceiling(G/aval.nworkers), 5)
+    Yall.list <- split(as.data.frame(Yall), ceiling(seq_len(G)/block.size))
+
+#    if(.Platform$OS.type == "unix") {
+    ## do some parallel computation under Unix
+#        multicoreParam <- MulticoreParam(workers = ncores)
+      res <- bplapply(X=Yall.list, islet.solve.block.revise, datuse=input, BPPARAM=BPPARAM)
+      return(res)}
+#  }
+#  else {
+    ## This will be windows
+    ## Use serial param or do not use any parallel functions, just use ‘lapply’
+    ## result should be of the same “type” from both the if and else statements.
+#    nworkers<-length(Yall.list)
+#    cl <- makeCluster(nworkers)
+
+    ## Remove clusterExport(), clusterEvalQ() if use devtools::install() to build package
+#    clusterExport(cl,list('colss'))
+#    clusterEvalQ(cl,{
+#        library(Matrix)
+#        library(BiocGenerics)})
+
+#    res <-parLapply(cl, X=Yall.list, islet.solve.block, datuse=input)
+#    stopCluster(cl)
+#
+#  }
+```
+
+## 5.4 example
+
+```{r example}
+ref = Gen_ref(J=50, T=5, mu_m = mu_m, sigma_m = sigma_m,
+                       gene_ls = gene_list, cell_ls = cellType_list, LFC=0.5,  
+              k_mu = 0.01, k_delta = 0.1)
+
+meta_data <- ref$meta_data
+lambda_list <- ref$lambda_ls
+M_list <- ref$M_ls
+Phi_list <- ref$Phi_ls
+DEG_list <- ref$DEG_ls
+
+head(meta_data)
+
+Y <- Gen_mix(lambda_ls = lambda_list, theta = theta)
+
+theta_df = as.data.frame(t(theta))
+
+sample_info <- data.frame(group = meta_data$group,
+                          subject_ID = meta_data$subject_ID,
+                          #age = meta_data$time_point,
+                          'B-cells' = theta_df$`B-cells`,
+                          'CD4' = theta_df$CD4,
+                          'CD8' = theta_df$CD8,
+                          'NK' = theta_df$NK,
+                          'Neutrophils' = theta_df$Neutrophils,
+                          'Monocytes' = theta_df$Monocytes)
+colnames(sample_info)[which(colnames(sample_info) == "B.cells")] <- "B-cells"
+
+N25_se <- SummarizedExperiment(
+    assays = list(counts = as.data.frame(Y)),
+    colData = sample_info)
+
+test_input <- dataPrep(dat_se = N25_se)
+```
+
+```{r execution, eval=FALSE}
+
+execution_time <- system.time({
+res = isletSolve.revise(input = test_input)
+})
+
+print(execution_time)
+saveRDS(res, "res_500_iterations.rds")
+```
+
+```{r res show}
+res = readRDS("res_500_iterations.rds")
+
+  # Organize estimated individual reference
+input = test_input
+  K<-input@K
+  SubjectID<-unique(input@SubjectID)
+  case_num<-input@case_num
+  case.indv.merge<-lapply(seq_len(K), function(k){
+      case.indv.all<-lapply(res, '[[', 3)
+      case.indv.ctk<-t(do.call(cbind, lapply(case.indv.all, '[[', k)))
+      case.indv.ctk<-ifelse(as.matrix(case.indv.ctk)<0, 0, case.indv.ctk)
+      dimnames(case.indv.ctk)<-list(rownames(input@exp_case), SubjectID[seq_len(case_num)])
+      return(case.indv.ctk)
+  })
+  ctrl.indv.merge<-lapply(seq_len(K), function(k){
+      ctrl.indv.all<-lapply(res, '[[', 4)
+      ctrl.indv.ctk<-t(do.call(cbind, lapply(ctrl.indv.all, '[[', k)))
+      ctrl.indv.ctk<-ifelse(as.matrix(ctrl.indv.ctk)<0, 0, ctrl.indv.ctk)
+      dimnames(ctrl.indv.ctk)<-list(rownames(input@exp_ctrl), SubjectID[-seq_len(case_num)])
+      return(ctrl.indv.ctk)
+  })
+  
+  case.u.merge<-lapply(seq_len(K), function(k){
+      case.u.all<-lapply(res, '[[', 9)
+      case.u.ctk<-t(do.call(cbind, lapply(case.u.all, '[[', k)))
+      #case.u.ctk<-ifelse(as.matrix(case.u.ctk)<0, 0, case.u.ctk)
+      dimnames(case.u.ctk)<-list(rownames(input@exp_case), SubjectID[seq_len(case_num)])
+      return(case.u.ctk)
+  })
+  
+  ctrl.u.merge <- lapply(seq_len(K), function(k){
+      ctrl.u.all<-lapply(res, '[[', 10)
+      ctrl.u.ctk<-t(do.call(cbind, lapply(ctrl.u.all, '[[', k)))
+      #ctrl.u.ctk<-ifelse(as.matrix(ctrl.u.ctk)<0, 0, ctrl.u.ctk)
+      dimnames(ctrl.u.ctk)<-list(rownames(input@exp_ctrl), SubjectID[-seq_len(case_num)])
+      return(ctrl.u.ctk)
+  })
+  
+    case.b.merge <- lapply(seq_len(K), function(k) {
+  # 获取 case.indv 和 case.u 的矩阵
+  case.indv <- case.indv.merge[[k]]
+  case.u <- case.u.merge[[k]]
+  
+  # 计算差值，并确保没有负值
+  case.diff <- case.indv - case.u
+  
+  return(case.diff)
+})
+  
+    ctrl.b.merge <- lapply(seq_len(K), function(k) {
+  # 获取 case.indv 和 case.u 的矩阵
+  ctrl.indv <- ctrl.indv.merge[[k]]
+  ctrl.u <- ctrl.u.merge[[k]]
+  
+  # 计算差值，并确保没有负值
+  ctrl.diff <- ctrl.indv - ctrl.u
+  
+  return(ctrl.diff)
+})
+    
+b.matrix <- lapply(seq_len(K), function(k) {
+  # 获取 case.indv 和 case.u 的矩阵
+  case.b <- case.b.merge[[k]]
+  ctrl.b <- ctrl.b.merge[[k]]
+  
+  # 计算差值，并确保没有负值
+  b.diff <- case.b - ctrl.b
+  
+  return(b.diff)
+})
+  
+  
+
+  names(case.indv.merge)<-input@CT
+  names(ctrl.indv.merge)<-input@CT
+  names(case.u.merge)<-input@CT
+  names(ctrl.u.merge)<-input@CT
+  names(case.b.merge)<-input@CT
+  names(ctrl.b.merge)<-input@CT
+  names(b.matrix)<-input@CT
+  llk<-unlist(lapply(res, '[[', 7))
+  
+
+outputSol <- setClass("outputSol", slots=c(case.ind.ref="list",
+                                           ctrl.ind.ref="list",
+                                           mLLK="numeric",
+                                           case.u.ref = "list",
+                                           ctrl.u.ref = "list",
+                                           case.b.ref = "list",
+                                           ctrl.b.ref = "list"
+                                           )
+                      )
+
+  rval<-outputSol(case.ind.ref=case.indv.merge,
+            ctrl.ind.ref=ctrl.indv.merge,
+            mLLK=llk,
+            case.u.ref = case.u.merge,
+            ctrl.u.ref = ctrl.u.merge,
+            case.b.ref = case.b.merge,
+            ctrl.b.ref = ctrl.b.merge)
+
+#saveRDS(rval, file = "rval_5000.rds")
+```
+
+
+```{r correlation}
+
+N25_age.ref <- rval
+caseVal <- caseEst(N25_age.ref)
+ctrlVal <- ctrlEst(N25_age.ref)
+
+lambda_list_islet <- list()
+
+for (i in 1:50) {
+  if (i %in% seq(1,25)) {
+    Bcell = caseVal[["B-cells"]][,i]
+    CD4 = caseVal[["CD4"]][,i]
+    CD8 = caseVal[["CD8"]][,i]
+    NK = caseVal[["NK"]][,i]
+    Neutrophils = caseVal[["Neutrophils"]][,i]
+    Monocytes = caseVal[["Monocytes"]][,i]
+    lambda = t(rbind(Bcell, CD4, CD8, NK, Neutrophils, Monocytes))
+    colnames(lambda) = c("B-cells","CD4", "CD8",  "NK", "Neutrophils", "Monocytes")
+    
+    lambda_list_islet[[as.character(i)]] <- lambda
+    
+  }
+  
+  else {
+    Bcell = ctrlVal[["B-cells"]][,i-25]
+    CD4 = ctrlVal[["CD4"]][,i-25]
+    CD8 = ctrlVal[["CD8"]][,i-25]
+    NK = ctrlVal[["NK"]][,i-25]
+    Neutrophils = ctrlVal[["Neutrophils"]][,i-25]
+    Monocytes = ctrlVal[["Monocytes"]][,i-25]
+    lambda = t(rbind(Bcell, CD4, CD8, NK, Neutrophils, Monocytes))
+    colnames(lambda) = c("B-cells","CD4", "CD8",  "NK", "Neutrophils", "Monocytes")
+    
+    lambda_list_islet[[as.character(i)]] <- lambda
+  }
+}
+
+true_ref_case <- lambda_list_islet[[1]][1:50, ]
+islet_ref_case <- lambda_list[[1]][1:50, ]
+ref_case_combined <- cbind(true_ref_case, islet_ref_case)
+pheatmap(ref_case_combined, 
+         cluster_rows = FALSE,  # 关闭行聚类
+         cluster_cols = FALSE,  # 关闭列聚类
+         show_rownames = FALSE,  # 不显示行名
+         show_colnames = TRUE,
+         main = "True Reference Panel vs Deconvolved Reference Panel (Case)")  # 显示列名
+
+true_ref_ctrl <- lambda_list[[126]][1:50, ]
+islet_ref_ctrl <- lambda_list_islet[[26]][1:50, ]
+ref_ctrl_combined <- cbind(true_ref_ctrl, islet_ref_ctrl)
+pheatmap(ref_ctrl_combined, 
+         cluster_rows = FALSE,  # 关闭行聚类
+         cluster_cols = FALSE,  # 关闭列聚类
+         show_rownames = FALSE,  # 不显示行名
+         show_colnames = TRUE,
+         main = "True Reference Panel vs Deconvolved Reference Panel (Ctrl)")  # 显示列名
+
+
+
+```
+
+
+```{r ref vis 0.0 -1}
+true_ref_case <- lambda_list[[1]]
+islet_ref_case <- lambda_list_islet[[1]]
+overall_correlation <- cor(c(true_ref_case), c(islet_ref_case))
+print(paste("Correlation of case:", overall_correlation))
+
+plot(c(log(true_ref_case+1)), c(log(islet_ref_case+1)), # +1 to avoid -Inf
+     main="ISLET estimated reference panel vs the true reference panel (Case)", 
+     xlab="Log(True Reference)",  
+     ylab="Log(Estimated Reference)", 
+     pch=19, 
+     col="blue")
+
+abline(a=0, b=1, col="red", lwd=2) 
+
+true_ref_ctrl <- lambda_list[[126]]
+islet_ref_ctrl <- lambda_list_islet[[26]]
+overall_correlation <- cor(c(true_ref_ctrl), c(islet_ref_ctrl))
+print(paste("Correlation of ctrl:", overall_correlation))
+
+plot(c(log(true_ref_ctrl+1)), c(log(islet_ref_ctrl+1)), 
+     main="ISLET estimated reference panel vs the true reference panel (Ctrl)", 
+     xlab="Log(True Reference)",  
+     ylab="Log(Estimated Reference)", 
+     pch=19,  
+     col="blue")
+
+abline(a=0, b=1, col="red", lwd=2) 
+```
+
+# 6. Without `U`: solve regression
+
+```{r solve regression}
+test_input <- dataPrep(dat_se = N25_se)
+#X_matrix = test_input@X
+X_matrix = as.matrix(test_input@X)
+Y_matrix = t(as.matrix(Y))
+
+
+
+execution_time <- system.time({
+B_matrix = Matrix::tcrossprod( Matrix::tcrossprod(solve( Matrix::crossprod(X_matrix)), X_matrix), t(Y_matrix))
+})
+
+print(execution_time)
+
+solved_mu_m_ctrl = t(B_matrix[1:6, ])
+solved_mu_m_ctrl[solved_mu_m_ctrl < 0] <- 0
+
+solved_mu_m_case = t(B_matrix[1:6, ]) + t(B_matrix[7:12, ])
+solved_mu_m_case[solved_mu_m_case < 0] <- 0
+
+true_ref_case <- exp(1/5*(M_list[[1]] + M_list[[2]] + M_list[[3]] + M_list[[4]] + M_list[[5]]))
+overall_correlation <- cor(c(true_ref_case), c(solved_mu_m_case))
+print(paste("Correlation of case:", overall_correlation))
+
+true_ref_case <- exp(1/5*(M_list[[126]] + M_list[[127]] + M_list[[128]] + M_list[[129]] + M_list[[130]]))
+overall_correlation <- cor(c(true_ref_ctrl), c(solved_mu_m_ctrl))
+print(paste("Correlation of ctrl:", overall_correlation))
+
+```
+
+
