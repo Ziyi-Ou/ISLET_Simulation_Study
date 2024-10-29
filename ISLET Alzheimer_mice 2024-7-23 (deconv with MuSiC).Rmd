@@ -1,0 +1,770 @@
+---
+title: "ISLET Alzheimer_mice"
+author: "Ziyi Ou"
+date: "2024-07-17"
+
+output: 
+  rmarkdown::html_document:
+    theme: journal
+    highlight: tango
+    toc: true
+    toc_float: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r load packages, warning=FALSE, message=FALSE}
+library(SummarizedExperiment)
+library(SingleCellExperiment)
+library(GEOquery)
+library(ISLET)
+library(Seurat)
+library(MuSiC)
+library(dplyr)
+library(ggplot2)
+library(tidyr)
+library(fgsea)
+library(Matrix)
+library(pheatmap)
+library(stringr)
+library(gridExtra)
+library(reshape2)
+library(biomaRt)
+```
+
+
+# 1. Overview of data
+
+## 1.1 Experiment Design
+
+To examine molecular changes throughout disease progression, brain tissue from male and female, 3xTg-AD and B6129 control mice, between the ages of 6- and 24-months-old were collected.
+
+- 3xTg-AD Mice: These mice carry three mutations related to Alzheimer's disease (APPSwe, PS1M146V, TauP301L) and are used for studying Alzheimer's disease.
+- B6129 Control Mice: These are the offspring of hybrid mice from the B6 and 129 strains, used as a control group to eliminate the effects of genetic background.
+
+## 1.2 Summary of Mouse Samples
+
+**Time points: 6 Months - 9 Months - 12 Months - 15 Months - 18 Months - 21 Months - 24 Months**
+
+### 6 Months Mice
+
+- Control:
+  - Female:
+    - GSM8061528 (6-month-old female biol rep #1)
+    - GSM8061529 (6-month-old female biol rep #2)
+    - GSM8061530 (6-month-old female biol rep #3)
+  - Male:
+    - GSM8061531 (6-month-old male biol rep #1)
+    - GSM8061532 (6-month-old male biol rep #2)
+    - GSM8061533 (6-month-old male biol rep #3)
+- AD:
+  - Female:
+    - GSM8061557 (6-month-old female biol rep #1)
+    - GSM8061560 (6-month-old female biol rep #2)
+    - GSM8061565 (6-month-old female biol rep #3)
+  - Male:
+    - GSM8061570 (6-month-old male biol rep #6)
+    - GSM8061576 (6-month-old male biol rep #1)
+    - GSM8061582 (6-month-old male biol rep #2)
+
+### 9 Months Mice
+
+- Control:
+  - Female:
+    - GSM8061509 (9-month-old female biol rep #1)
+  - Male:
+    - GSM8061510 (9-month-old male biol rep #1)
+    - GSM8061511 (9-month-old male biol rep #2)
+    - GSM8061512 (9-month-old male biol rep #3)
+- AD:
+  - Female:
+    - GSM8061573 (9-month-old female biol rep #1)
+    - GSM8061577 (9-month-old female biol rep #2)
+    - GSM8061579 (9-month-old female biol rep #3)
+  - Male:
+    - GSM8061555 (9-month-old male biol rep #1)
+    - GSM8061556 (9-month-old male biol rep #2)
+    - GSM8061558 (9-month-old male biol rep #3)
+    - GSM8061561 (9-month-old male biol rep #5)
+    - GSM8061566 (9-month-old male biol rep #4)
+
+### 12 Months Mice
+
+- Control:
+  - Female:
+    - GSM8061513 (12-month-old female biol rep #1)
+    - GSM8061514 (12-month-old female biol rep #2)
+    - GSM8061515 (12-month-old female biol rep #3)
+  - Male:
+    - GSM8061516 (12-month-old male biol rep #1)
+    - GSM8061517 (12-month-old male biol rep #2)
+    - GSM8061518 (12-month-old male biol rep #3)
+- AD:
+  - Female:
+    - GSM8061540 (12-month-old female biol rep #1)
+    - GSM8061541 (12-month-old female biol rep #2)
+    - GSM8061562 (12-month-old female biol rep #3)
+    - GSM8061567 (12-month-old female biol rep #4)
+  - Male:
+    - GSM8061571 (12-month-old male biol rep #1)
+    - GSM8061574 (12-month-old male biol rep #2)
+    - GSM8061580 (12-month-old male biol rep #3)
+
+### 15 Months Mice
+
+- Control:
+  - Female:
+    - GSM8061534 (15-month-old female biol rep #1)
+    - GSM8061535 (15-month-old female biol rep #2)
+    - GSM8061536 (15-month-old female biol rep #3)
+  - Male:
+    - GSM8061537 (15-month-old male biol rep #1)
+    - GSM8061538 (15-month-old male biol rep #2)
+    - GSM8061539 (15-month-old male biol rep #3)
+- AD:
+  - Female:
+    - GSM8061519 (15-month-old female biol rep #1)
+    - GSM8061520 (15-month-old female biol rep #2)
+    - GSM8061521 (15-month-old female biol rep #3)
+  - Male:
+    - GSM8061522 (15-month-old male biol rep #1)
+    - GSM8061523 (15-month-old male biol rep #2)
+    - GSM8061524 (15-month-old male biol rep #3)
+
+### 18 Months Mice:
+
+- Control:
+  - Female:
+    - GSM8061542 (18-month-old female biol rep #1)
+    - GSM8061543 (18-month-old female biol rep #2)
+    - GSM8061544 (18-month-old female biol rep #3)
+  - Male:
+    - GSM8061545 (18-month-old male biol rep #1)
+    - GSM8061546 (18-month-old male biol rep #2)
+    - GSM8061547 (18-month-old male biol rep #3)
+- AD:
+  - Female:
+    - GSM8061525 (18-month-old female biol rep #1)
+    - GSM8061526 (18-month-old female biol rep #2)
+    - GSM8061527 (18-month-old female biol rep #3)
+  - Male:
+    - GSM8061548 (18-month-old male biol rep #1)
+    - GSM8061549 (18-month-old male biol rep #2)
+    - GSM8061583 (18-month-old male biol rep #2)
+    - GSM8061584 (18-month-old male biol rep #3)
+
+### 21 Months Mice
+
+- Control:
+  - Female:
+    - GSM8061575 (21-month-old female biol rep #1)
+    - GSM8061578 (21-month-old female biol rep #2)
+    - GSM8061581 (21-month-old female biol rep #3)
+  - Male:
+    - GSM8061563 (21-month-old male biol rep #1)
+    - GSM8061568 (21-month-old male biol rep #2)
+    - GSM8061572 (21-month-old male biol rep #3)
+- AD:
+  - Female
+    - GSM8061550 (21-month-old female biol rep #1)
+    - GSM8061551 (21-month-old female biol rep #2)
+    - GSM8061552 (21-month-old female biol rep #3)
+    - GSM8061553 (21-month-old female biol rep #4)
+    - GSM8061554 (21-month-old female biol rep #5)
+
+### 24 Months Mice:
+
+- AD:
+  - Female:
+    - GSM8061559 (24-month-old female biol rep #1)
+    - GSM8061564 (24-month-old female biol rep #2)
+    - GSM8061569 (24-month-old female biol rep #3)
+
+
+
+```{r import data, warning=FALSE, message=FALSE}
+rm(list=ls())
+setwd("/Users/ziyiou/CUHKSZ/23 Fall/Genomics/longitudinal analysis")
+#library(GEOquery)
+data <- getGEO("GSE254970")
+gset <- data[[1]]
+exprs_data <- read.csv("/Users/ziyiou/CUHKSZ/23 Fall/Genomics/longitudinal analysis/data/Alzheimer mice/GSE254970_processed_data.csv", sep=",", header = TRUE)
+pdata <- pData(gset)
+#colnames(exprs_data) = pdata$geo_accession
+```
+
+In the raw data there are 24080 genes with a few duplicates. We deleted the duplicated ones here. Now there are 24022 genes left. 
+
+```{r delete}
+cat("Number of genes after deleting replicated ones:", length(unique(exprs_data[, 1])))
+duplicates <- duplicated(exprs_data[, 1])
+exprs_data <- exprs_data[!duplicates, ]
+rownames(exprs_data) <- exprs_data[, 1]
+exprs_data <- exprs_data[,-1]
+```
+
+## 1.3 Quality Control
+
+We conduct quality control (QC) to our data. Notably, the quality control of the scRNA-seq for reference profile is the same as here.
+
+
+```{r qc, warning=FALSE}
+# Keep only "detectable" genes: at least 5% of cells (regardless of the group) have a read/UMI count different from 0
+keep <- which(Matrix::rowSums(exprs_data > 0) >= round(0.05 * ncol(exprs_data)))
+exprs_data = exprs_data[keep,]
+cat("Number of genes after QC:", nrow(exprs_data))
+```
+
+
+# 2. Deconvolution of Cell Proportion
+
+## 2.1 Construction of reference matrix
+
+We used the mouse brain single cell RNA sequencing data from `GSE129788` to construct the single cell signature gene matrix, similar to Ren's work (2023). Specifically, we choose the `GSM3722100` and `GSM3722108` to construct reference profile.
+
+Ren's work: https://www.nature.com/articles/s41598-023-44183-7#Sec15
+
+Firstly we use `Seurat` to conduct clustering analysis on `GSM3722100` and `GSM3722108`. According to the supplementary file of `GSE129788` from GEO, there are 6 types of cells in this scRNA-seq, they are: IMMUNE_Lin (Immune Lineage), OLG_Lin (Oligodendrocyte Lineage), Neuron Lineage (NEURON_Lin), Vascular Lineage (VASC_Lin), Astrocyte Lineage (ASC_Lin) and Ependymal Cell Lineage (EPC_Lin). 
+
+```{r construct C}
+m1 <- read.table("//Users/ziyiou/CUHKSZ/23 Fall/Genomics/longitudinal analysis/data/Alzheimer mice/GSM3722100_YX1L_10X.txt", sep = "\t")
+m2 <- read.table("/Users/ziyiou/CUHKSZ/23 Fall/Genomics/longitudinal analysis/data/Alzheimer mice/GSM3722108_OX1X_10X.txt", sep = "\t")
+
+##################### QC #####################
+
+# First: cells with library size, mitochondrial or ribosomal content further than three MAD away were discarded
+filterCells <- function(filterParam){
+	cellsToRemove <- which(filterParam > median(filterParam) + 3 * mad(filterParam) | filterParam < median(filterParam) - 3 * mad(filterParam) )
+	cellsToRemove
+}
+
+sc_data <- do.call(cbind, list(m1, m2))
+libSizes <- colSums(sc_data)
+gene_names <- rownames(sc_data)
+mtID <- grepl("^MT-|_MT-", gene_names, ignore.case = TRUE)
+rbID <- grepl("^RPL|^RPS|_RPL|_RPS", gene_names, ignore.case = TRUE)
+
+mtPercent <- colSums(sc_data[mtID, ])/libSizes
+rbPercent <- colSums(sc_data[rbID, ])/libSizes
+
+lapply(list(libSizes = libSizes, mtPercent = mtPercent, rbPercent = rbPercent), filterCells) %>% 
+	unlist() %>% 
+	unique() -> cellsToRemove
+
+if(length(cellsToRemove) != 0){
+	sc_data <- sc_data[,-cellsToRemove]
+}
+
+# Keep only "detectable" genes: at least 5% of cells (regardless of the group) have a read/UMI count different from 0
+keep <- which(Matrix::rowSums(sc_data > 0) >= round(0.05 * ncol(sc_data)))
+sc_data = sc_data[keep,]
+
+##################### Clustering #####################
+
+sc_seurat_obj <- CreateSeuratObject(counts = sc_data)
+
+sc_seurat_obj <- NormalizeData(sc_seurat_obj)
+sc_seurat_obj <- FindVariableFeatures(sc_seurat_obj, nfeatures = 2000)
+
+sc_seurat_obj <- ScaleData(sc_seurat_obj)
+
+# PCA
+sc_seurat_obj <- RunPCA(sc_seurat_obj, verbose=FALSE)
+VizDimLoadings(sc_seurat_obj, dims = 1:2, reduction = "pca")
+DimPlot(sc_seurat_obj, reduction = "pca") + NoLegend()
+DimHeatmap(sc_seurat_obj, dims = 1:10, cells = 500, balanced = TRUE)
+ElbowPlot(sc_seurat_obj)
+
+# Clustering
+sc_seurat_obj <- FindNeighbors(sc_seurat_obj, dims = 1:10)
+sc_seurat_obj <- FindClusters(sc_seurat_obj, resolution = 0.025)
+
+# find marker genes of each cluster
+cluster_markers <- FindAllMarkers(sc_seurat_obj, only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25, verbose = FALSE)
+
+# choose top marker
+top_markers <- cluster_markers %>%
+  group_by(cluster) %>%
+  top_n(n = 10, wt = avg_log2FC)
+
+top_genes <- top_markers %>% group_by(cluster) %>% top_n(n = 5, wt = avg_log2FC)
+#FeaturePlot(sc_seurat_obj, features = unique(top_genes$gene), cols = c("blue", "red"), reduction = "tsne")
+
+new_cluster_ids <- c("CellType1", "CellType2", "CellType3", "CellType4", "CellType5", "CellType6")
+names(new_cluster_ids) <- levels(sc_seurat_obj)
+sc_seurat_obj <- RenameIdents(sc_seurat_obj, new_cluster_ids)
+
+# bulk signature matrix
+average_expression <- AverageExpression(sc_seurat_obj)
+bulk_signature_matrix <- average_expression$RNA
+
+head(bulk_signature_matrix)
+write.csv(bulk_signature_matrix, "/Users/ziyiou/CUHKSZ/23 Fall/Genomics/longitudinal analysis/data/Alzheimer mice/signature_matrix bulk.csv")
+
+# sc signature matrix
+cell_ids <- colnames(sc_seurat_obj)
+cluster_ids <- sc_seurat_obj$seurat_clusters
+cell_types <- sc_seurat_obj@active.ident
+
+pheno_sc_data <- data.frame(
+  CellID = cell_ids,
+  ClusterID = cluster_ids,
+  CellType = cell_types,
+  stringsAsFactors = FALSE
+)
+
+pheno_sc_data$SubjectName <- ifelse(pheno_sc_data$CellID %in% colnames(m1), "m1", 
+                                     ifelse(pheno_sc_data$CellID %in% colnames(m2), "m2", NA))
+sc_seurat_obj$SubjectName <- pheno_sc_data$SubjectName
+sc_seurat_obj$CellType <- pheno_sc_data$CellType
+
+# Visualization
+sc_seurat_obj <- RunTSNE(sc_seurat_obj, dims = 1:10)
+DimPlot(sc_seurat_obj, reduction = "tsne", group.by = c("CellType", "SubjectName")) 
+
+# find variable feature (top 2,000)
+markers <- VariableFeatures(sc_seurat_obj)
+marker_distrib <- data.frame(genes = character(length(VariableFeatures(sc_seurat_obj))))
+marker_distrib$genes <- VariableFeatures(sc_seurat_obj)
+
+variable_gene_plot <- VariableFeaturePlot(sc_seurat_obj)
+variable_gene_plot_with_label <- LabelPoints(plot= variable_gene_plot, 
+            points = head(VariableFeatures(sc_seurat_obj), 10),
+            repel=TRUE, xnudge = 0, ynudge = 0)
+variable_gene_plot_with_label
+```
+
+## 2.2 Cell type deconvolution
+
+Here we apply `MuSiC` for cell type deconvolution.
+
+```{r MuSiC}
+C = sc_data
+T = exprs_data
+pDataC = pheno_sc_data
+
+    ##########    MATRIX DIMENSION APPROPRIATENESS    ##########
+keep = intersect(rownames(C),rownames(T)) 
+C = C[keep,]
+T = T[keep,]
+
+
+C.eset <- Biobase::ExpressionSet(assayData = as.matrix(C),phenoData = Biobase::AnnotatedDataFrame(pDataC))
+T.eset <- Biobase::ExpressionSet(assayData = as.matrix(T))
+
+
+C.eset <- SingleCellExperiment(assays = list(counts = as.matrix(C)))
+colData(C.eset) <- DataFrame(assigned_cluster = pDataC$CellType, SubjectName = rownames(pDataC))
+
+RESULTS = t(MuSiC::music_prop(bulk.mtx = exprs(T.eset), sc.sce = C.eset, 
+                    clusters = 'assigned_cluster',
+                    markers = NULL, 
+                    normalize = FALSE, 
+                    samples = 'SubjectName', 
+                    verbose = F)$Est.prop.weighted)
+
+head(RESULTS[, 1:5])
+```
+
+
+# 3. ISLET
+
+## 3.1 Overview of ISLET
+
+![](figure/Overview of ISLET.jpg) 
+An overview of our proposed method ISLET (Individual Specific celL typE referencing Tool). **A** ISLET takes repeatedly measured bulk RNA-seq data, cell type proportions (known or estimated), and disease status as the algorithm input. Additional covariates are optional. **B** By a hierarchical mixed-effect modeling, ISLET can iteratively retrieve individual-specific and cell-type-specific gene expression reference panels. The fixed effect is the group-level average and the random effect is the individual-level deviance from the group mean. **C** Given the individual-specific reference panel, ISLET can conduct test to identify cell-type-specific differentially expressed genes (csDEG)
+
+ISLET is formulated as a mixed-effect regression model:
+$$
+y = X\beta + Au + \epsilon
+$$
+
+## 3.2 Data preparation
+
+ISLET needs one input file organized into `SummarizedExperiment` objects, combining cases and controls. So we first convert data into SummarizedExperiment objects.
+
+
+The original data from GEO doesn't specify subject ID, so here we treat sample with the same sex, genotype and the same biological repeat number as the same subject. We manually name subject by sex(1 for female 2 for male)-genotype(0 for ctrl 1 for case)-bio rep. For example, a female mouse whose genotype is B6129 with bio rep #1 will be named F01.
+
+```{r info}
+######### colData:  sample meta-data & input cell type proportions #######
+
+### proportion
+proportion <- data.frame(t(RESULTS))
+rownames(proportion) <- pdata$geo_accession
+
+### meta-data
+pheno_bulk_data <- read.csv("/Users/ziyiou/CUHKSZ/23 Fall/Genomics/longitudinal analysis/data/Alzheimer mice/sample_pheno_data.csv", sep=",", row.names = 1)
+sample_info <- data.frame(group = ifelse(pdata$`genotype:ch1` == "B6;129S1/SvImJ", "ctrl", 
+                      ifelse(pdata$`genotype:ch1` == "3xTg-AD", "case", NA)),
+                      subject_ID = pheno_bulk_data$subject_ID,
+                      CellType1 = proportion$CellType1,
+                      CellType2 = proportion$CellType2,
+                      CellType3 = proportion$CellType3,
+                      CellType4 = proportion$CellType4, # No CellType5
+                      CellType6 = proportion$CellType6
+                      )
+
+sample_info_age <- data.frame(group = ifelse(pdata$`genotype:ch1` == "B6;129S1/SvImJ", "ctrl", 
+                      ifelse(pdata$`genotype:ch1` == "3xTg-AD", "case", NA)),
+                      subject_ID = pheno_bulk_data$subject_ID,
+                          age = as.numeric(pdata$`age (months):ch1`),
+                      CellType1 = proportion$CellType1,
+                      CellType2 = proportion$CellType2,
+                      CellType3 = proportion$CellType3,
+                      CellType4 = proportion$CellType4, # No CellType5
+                      CellType6 = proportion$CellType6
+                      )
+
+sample_info_age_sex <- data.frame(group = ifelse(pdata$`genotype:ch1` == "B6;129S1/SvImJ", "ctrl", 
+                      ifelse(pdata$`genotype:ch1` == "3xTg-AD", "case", NA)),
+                      subject_ID = pheno_bulk_data$subject_ID,
+                          age = as.numeric(pdata$`age (months):ch1`),
+                          sex = ifelse(pdata$`Sex:ch1` == "Female", 0, 
+                      ifelse(pdata$`Sex:ch1` == "Male", 1, NA)),
+                      # 0 for female, 1 for male
+                      CellType1 = proportion$CellType1,
+                      CellType2 = proportion$CellType2,
+                      CellType3 = proportion$CellType3,
+                      CellType4 = proportion$CellType4, # No CellType5
+                      CellType6 = proportion$CellType6
+                      )
+rownames(sample_info) = pdata$geo_accession
+rownames(sample_info_age) = pdata$geo_accession
+rownames(sample_info_age_sex) = pdata$geo_accession
+
+
+sample_info <- sample_info %>% arrange(subject_ID) %>% arrange(group)
+sample_info_age <- sample_info_age %>% arrange(subject_ID) %>% arrange(group)
+sample_info_age_sex <- sample_info_age_sex %>% arrange(subject_ID) %>% arrange(group)
+
+######### counts: gene expression value data frame #########
+counts = T
+colnames(counts) = pdata$geo_accession
+sorted_row_names <- rownames(sample_info)
+counts <- data.frame(counts[ , sorted_row_names])
+```
+
+
+```{r summarized experiment}
+mice_se <- SummarizedExperiment(
+    assays = list(counts = counts),
+    colData = sample_info)
+# unique(colData(mice_se)$group)[1]
+
+mice_se_age <- SummarizedExperiment(
+    assays = list(counts = counts),
+    colData = sample_info_age)
+
+mice_se_age_sex <- SummarizedExperiment(
+    assays = list(counts = counts),
+    colData = sample_info_age_sex)
+```
+
+```{r data prep}
+# for mean
+input1 <- dataPrep(dat_se = mice_se)
+input1
+  
+# for slope(age)
+input2 <- dataPrepSlope(dat_se = mice_se_age)
+input2
+```
+
+
+## 3.3 Deconvolve individual-specific reference panel
+
+With the curated data `input1` from the previous step, now we can use `ISLET` to conduct deconvolution and obtain the individual-specific and cell-type-specific reference panels. This process can be achieved by running:
+
+```{r deconv}
+res.sol <- isletSolve(input=input1)
+```
+
+The total running time of `isletSolve` here is 6 min.
+
+The `res.sol` is the deconvolution result list. For both case and control group, the deconvolution result is a list of length K, where K is the number of cell types. For each of the K elements, it is a matrix of dimension G by N. For each of the K cell types, it stores the deconvoluted values in a feature (G) by subject (N) matrix.
+
+```{r # view deconv result}
+#View the deconvolution results
+caseVal <- caseEst(res.sol)
+ctrlVal <- ctrlEst(res.sol)
+#length(caseVal) #For cases, a list of 11 cell types' matrices. 
+#length(ctrlVal) #For controls, a list of 6 cell types' matrices.
+
+## view the reference panels for CellType1, 
+## for the first 5 genes and first 4 subjects, in Case group.
+caseVal$CellType1[1:5, 1:4]
+
+## view the reference panels for CellType1, 
+## for the first 5 genes and first 4 subjects, in Control group.
+ctrlVal$CellType1[1:5, 1:4]
+
+caseVal$CellType2[1:5, 1:4]
+ctrlVal$CellType2[1:5, 1:4]
+
+caseVal$CellType3[1:5, 1:4]
+ctrlVal$CellType3[1:5, 1:4]
+
+caseVal$CellType4[1:5, 1:4]
+ctrlVal$CellType4[1:5, 1:4]
+
+caseVal$CellType6[1:5, 1:4]
+ctrlVal$CellType6[1:5, 1:4]
+```
+
+
+## 3.4 Test cell-type-specific differential expression (csDE) in mean (intercept): test the group effect on individual reference panels
+
+Now we can test the group effect on individual reference panels, i.e., identifying csDE genes in mean or intercept. In this ‘intercept test’, we assume that the individual-specific reference panel is unchanged across time points. Note that the deconvolution in section **3.3** can be skipped, if one only need to call csDE genes. 
+
+The result `res.test` is a matrix of p-values, in the dimension of feature by cell type. Each element is the LRT p-value, by contrasting case group and control group, for one feature in one cell type.
+
+Total running time of `isletTest`: 40 min
+
+```{r 3.4}
+#Test for csDE genes
+res.test <- isletTest(input=input1)
+rownames(res.test) = rownames(counts)
+head(res.test)
+
+```
+
+
+## 3.5 Test csDE in change-rate (slope): 
+
+Given an additional continuous variable such as time or age, ISLET is able to compare cases and controls in the change-rate of reference profile over time. This is the ‘slope test’. Here, the assumption is that for the participants or subjects in a group, the individual reference profile could change over time, with change-rate fixed by group. At a given time point, there may be no (significant) group effect in the reference panel, but the participants still have distinct underlying reference profiles. Under this setting, it is of interest to test for such difference. Below is an example to detect reference panel change-rate difference between two groups, from data preparation to test.
+
+The result `age.test` is a matrix of p-values, in the dimension of feature by cell type. Each element is the LRT p-value, by contrasting case group and control group, for one feature in one cell type. In contrast to the (intercept) test described before, here is a test for difference of the expression CHANGE IN REFERENCE over time, between cases and controls.
+
+Total running time of `isletTest`: 32 min
+
+```{r 3.5}
+age.test <- isletTest(input = input2)
+rownames(age.test) = rownames(counts)
+head(age.test)
+```
+
+
+## 3.6 imply: improving cell-type deconvolution accuracy using personalized reference profiles
+
+Total running time of `imply`: 3 min
+
+```{r imply}
+dat <- implyDataPrep(sim_se = mice_se)
+
+#Use imply for deconvolution
+result <- imply(dat)
+
+#View the subject-specific and cell-type-specific reference panels solved 
+#by linear mixed-effect models of the first subject
+result$p.ref[,,1]
+
+#View the improved cell deconvolution results
+head(result$imply.prop)
+tail(result$imply.prop)
+```
+```{r vis}
+music_prop <- proportion[, -1]
+islet_prop <- result$imply.prop
+
+
+common_rownames <- intersect(rownames(music_prop), rownames(islet_prop))
+music_prop <- music_prop[common_rownames, ]
+islet_prop <- islet_prop[common_rownames, ]
+
+
+heatmap_music <- pheatmap(music_prop, main = "Music Proportions", cluster_rows = F, cluster_cols = F,
+         show_rownames = F)
+heatmap_islet <- pheatmap(islet_prop, main = "ISLET Proportions", cluster_rows = F, cluster_cols = F,
+         show_rownames = F)
+
+grid.arrange(
+  heatmap_music$gtable, 
+  heatmap_islet$gtable, 
+  ncol = 2
+)
+```
+
+
+# 4. Gene Sets Enrichment Analysis (GSEA)
+
+We use package `fgsea` to perform Gene Sets Enrichment Analysis (GSEA) across 45 candidate REACTOME pathways with size of at least 20 genes, using the rank of test statistics in each method.
+
+## 4.1 Top 20 variable genes in the bulk sample
+
+Here we are interested in the top 20 variable genes in the bulk sample. 
+
+```{r top 20 variable genes}
+gene_variability <- apply(counts, 1, sd)
+variability_df <- data.frame(gene = rownames(counts), variability = gene_variability)
+# sort according to variablity
+variability_df <- variability_df[order(variability_df$variability, decreasing = TRUE), ]
+top20_genes <- head(variability_df$gene, 20)
+custom_gene_set <- list(
+  "top20_variable_genes" = top20_genes
+)
+top20_counts <- counts[top20_genes, ]
+
+pheatmap(
+  top20_counts,
+  cluster_rows = TRUE,     # 是否对基因进行聚类
+  cluster_cols = F,     # 是否对样本进行聚类
+  scale = "row",           # 对行进行标准化
+  color = colorRampPalette(c("blue", "white", "red"))(50), # 热图颜色
+  main = "Heatmap of the Count of Top 20 Variable Genes"
+)
+```
+
+## 4.2 csDEG detected by ISLET
+
+We convert the $\mathrm{p-value}$ acquired in the above section **3.5** into -log10 scale since the small p-values are essential in csDEG calling. The more significant the gene is, the bigger $-log_{10}(\mathrm{p-value})$ is. We visualize it by a heatmap.
+
+```{r vis_csDEG}
+#significant_gene_matrix <- age.test[rownames(age.test) %in% unlist(csDEG_list), ]
+
+pheatmap(-log10(age.test),
+         cluster_rows = TRUE,
+         cluster_cols = TRUE,
+         color = colorRampPalette(c("blue", "white", "red"))(50),
+         show_rownames = F,
+         main = "Heatmap of -log10(p-value) for csDEG")
+```
+
+We used BH procedure to control FDR in multiple testing, and then reported
+csDEG at FDR < 0.25. (In the `ISLET` paper, the author reported csDEG at FDR < 0.1, but here all the FDR we get is above 0.2, so we report csDEG at FDR < 0.25)
+
+Given that there are so many genes reported, we only explore the top 50 genes with least p-value, meaning that they are the most significant. We want to be stringent with the csDEGs, so we only keep csDEG that appear in only one cell type. 
+
+```{r csDEG}
+p_values_long <- as.data.frame(as.table(age.test))
+colnames(p_values_long) <- c("Gene", "CellType", "PValue")
+p_values_long$FDR <- p.adjust(p_values_long$PValue, method = "BH")
+
+csDEG <- p_values_long %>%
+  filter(FDR < 0.25)
+
+
+top_csDEG <- csDEG %>%
+  group_by(CellType) %>%
+  arrange(CellType, PValue) %>%
+  slice_head(n = 50) %>%
+  ungroup()
+
+gene_list_by_celltype <- top_csDEG %>%
+  split(.$CellType) %>%
+  lapply(function(df) df$Gene)
+
+#gene_list_by_celltype
+```
+
+
+```{r heatmap for top 20 csDEG}
+# 计算 -log(p-value)
+top_csDEG <- top_csDEG %>%
+  mutate(NegLogPValue = -log10(PValue))
+
+# 准备绘图数据：宽格式
+heatmap_data <- top_csDEG %>%
+  dplyr::select(CellType, Gene, NegLogPValue) %>%
+  pivot_wider(names_from = CellType, values_from = NegLogPValue)
+
+```
+
+```{r}
+# 计算每个基因在不同细胞类型中的出现次数
+gene_celltype_count <- heatmap_data %>%
+  pivot_longer(-Gene, names_to = "CellType", values_to = "NegLogPValue") %>%
+  filter(!is.na(NegLogPValue)) %>%  # 只考虑非 NA 值
+  group_by(Gene) %>%
+  summarise(CellTypeCount = n_distinct(CellType)) %>%
+  filter(CellTypeCount == 1)  # 筛选仅在一种细胞类型中出现的基因
+
+# 将这些基因与原数据进行合并，找出这些基因所在的细胞类型
+unique_genes <- gene_celltype_count$Gene
+unique_genes_data <- heatmap_data %>%
+  pivot_longer(-Gene, names_to = "CellType", values_to = "NegLogPValue") %>%
+  filter(Gene %in% unique_genes, !is.na(NegLogPValue)) %>%
+  dplyr::select(CellType, Gene)
+
+# 创建一个按细胞类型整理的命名列表，每个元素是一个基因向量
+gene_list_by_celltype <- unique_genes_data %>%
+  group_by(CellType) %>%
+  summarise(Genes = list(Gene), .groups = 'drop')
+
+# 将结果转换为命名列表
+gene_list_by_celltype_named_list <- setNames(
+  lapply(gene_list_by_celltype$Genes, function(x) x),
+  gene_list_by_celltype$CellType
+)
+
+# 打印结果
+print(gene_list_by_celltype_named_list)
+```
+
+We plot the dynamic of the most significant gene in CellType 1, 2, 3, 4. They are: `Pacrg`, `Rpe`, `Adap2os`, `Fabp7`.
+
+```{r vis degs dynamic}
+# 提取感兴趣的基因
+genes_of_interest <- c("Pacrg", "Rpe", "Adap2os", "Fabp7")
+counts_subset <- counts[genes_of_interest, ]
+
+# 转置 counts 数据框，使得基因为行，样本为列
+counts_long <- as.data.frame(t(counts_subset))
+counts_long$Sample_ID <- rownames(counts_long)
+
+# 将 counts_long 和 sample_info_age_sex 合并
+data_combined <- merge(counts_long, sample_info_age_sex, by.x = "Sample_ID", by.y = "row.names")
+
+# 将数据从宽格式转换为长格式
+data_long <- data_combined %>%
+  pivot_longer(cols = starts_with("Pacrg") | starts_with("Rpe") | starts_with("Adap2os") | starts_with("Fabp7"),
+               names_to = "gene",
+               values_to = "count")
+
+
+# 汇总数据
+data_summarized <- data_long %>%
+  group_by(age, group, gene) %>%
+  summarise(total_count = sum(count, na.rm = TRUE), .groups = 'drop') %>%
+  mutate(log2_count = log2(total_count + 1)) # 添加1以避免log2(0)
+
+# 创建一个基因列表
+genes <- c("Pacrg", "Rpe", "Adap2os", "Fabp7")
+
+# 绘图函数
+plot_gene <- function(gene_name, data) {
+  ggplot(data %>% filter(gene == gene_name), aes(x = age, y = log2_count, color = group, group = group)) +
+    geom_line() +
+    geom_point() +
+    labs(title = paste("Gene:", gene_name),
+         x = "Age (Month)",
+         y = "Log2(Count)") +
+    theme_minimal()
+}
+
+# 绘制每个基因的图
+plots <- lapply(genes, function(gene) {
+  plot_gene(gene, data_summarized)
+})
+
+# 保存或展示图形
+library(gridExtra)
+do.call(grid.arrange, c(plots, ncol = 2))
+
+#for (i in 1:length(plots)) {
+#  ggsave(filename = paste0(genes[i], "_plot.png"), plot = plots[[i]], width = 8, height = 6)}
+
+```
+
+
+
+## 4.3 Enrichment analysis
+
+Finally we conduct the enrichment analysis by `fgsea`.
+
+```{r enrichment analysis}
+
+```
+
