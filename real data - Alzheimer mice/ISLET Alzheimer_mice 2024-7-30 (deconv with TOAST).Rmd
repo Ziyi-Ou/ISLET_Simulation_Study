@@ -1,0 +1,1823 @@
+---
+title: "ISLET Alzheimer_mice"
+author: "Ziyi Ou"
+date: "2024-07-17"
+
+output: 
+  rmarkdown::html_document:
+    theme: journal
+    highlight: tango
+    toc: true
+    toc_float: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r load packages, warning=FALSE, message=FALSE}
+library(SummarizedExperiment)
+library(SingleCellExperiment)
+library(GEOquery)
+library(ISLET)
+library(Seurat)
+library(MuSiC)
+library(dplyr)
+library(ggplot2)
+library(tidyr)
+library(fgsea)
+library(Matrix)
+library(pheatmap)
+library(stringr)
+library(gridExtra)
+library(reshape2)
+library(biomaRt)
+library(FARDEEP)
+library(linseed)
+```
+
+
+# 1. Overview of data
+
+## 1.1 Experiment Design
+
+To examine molecular changes throughout disease progression, brain tissue from male and female, 3xTg-AD and B6129 control mice, between the ages of 6- and 24-months-old were collected.
+
+- 3xTg-AD Mice: These mice carry three mutations related to Alzheimer's disease (APPSwe, PS1M146V, TauP301L) and are used for studying Alzheimer's disease.
+- B6129 Control Mice: These are the offspring of hybrid mice from the B6 and 129 strains, used as a control group to eliminate the effects of genetic background.
+
+## 1.2 Summary of Mouse Samples
+
+**Time points: 6 Months - 9 Months - 12 Months - 15 Months - 18 Months - 21 Months - 24 Months**
+
+### 6 Months Mice
+
+- Control:
+  - Female:
+    - GSM8061528 (6-month-old female biol rep #1)
+    - GSM8061529 (6-month-old female biol rep #2)
+    - GSM8061530 (6-month-old female biol rep #3)
+  - Male:
+    - GSM8061531 (6-month-old male biol rep #1)
+    - GSM8061532 (6-month-old male biol rep #2)
+    - GSM8061533 (6-month-old male biol rep #3)
+- AD:
+  - Female:
+    - GSM8061557 (6-month-old female biol rep #1)
+    - GSM8061560 (6-month-old female biol rep #2)
+    - GSM8061565 (6-month-old female biol rep #3)
+  - Male:
+    - GSM8061570 (6-month-old male biol rep #6)
+    - GSM8061576 (6-month-old male biol rep #1)
+    - GSM8061582 (6-month-old male biol rep #2)
+
+### 9 Months Mice
+
+- Control:
+  - Female:
+    - GSM8061509 (9-month-old female biol rep #1)
+  - Male:
+    - GSM8061510 (9-month-old male biol rep #1)
+    - GSM8061511 (9-month-old male biol rep #2)
+    - GSM8061512 (9-month-old male biol rep #3)
+- AD:
+  - Female:
+    - GSM8061573 (9-month-old female biol rep #1)
+    - GSM8061577 (9-month-old female biol rep #2)
+    - GSM8061579 (9-month-old female biol rep #3)
+  - Male:
+    - GSM8061555 (9-month-old male biol rep #1)
+    - GSM8061556 (9-month-old male biol rep #2)
+    - GSM8061558 (9-month-old male biol rep #3)
+    - GSM8061561 (9-month-old male biol rep #5)
+    - GSM8061566 (9-month-old male biol rep #4)
+
+### 12 Months Mice
+
+- Control:
+  - Female:
+    - GSM8061513 (12-month-old female biol rep #1)
+    - GSM8061514 (12-month-old female biol rep #2)
+    - GSM8061515 (12-month-old female biol rep #3)
+  - Male:
+    - GSM8061516 (12-month-old male biol rep #1)
+    - GSM8061517 (12-month-old male biol rep #2)
+    - GSM8061518 (12-month-old male biol rep #3)
+- AD:
+  - Female:
+    - GSM8061540 (12-month-old female biol rep #1)
+    - GSM8061541 (12-month-old female biol rep #2)
+    - GSM8061562 (12-month-old female biol rep #3)
+    - GSM8061567 (12-month-old female biol rep #4)
+  - Male:
+    - GSM8061571 (12-month-old male biol rep #1)
+    - GSM8061574 (12-month-old male biol rep #2)
+    - GSM8061580 (12-month-old male biol rep #3)
+
+### 15 Months Mice
+
+- Control:
+  - Female:
+    - GSM8061534 (15-month-old female biol rep #1)
+    - GSM8061535 (15-month-old female biol rep #2)
+    - GSM8061536 (15-month-old female biol rep #3)
+  - Male:
+    - GSM8061537 (15-month-old male biol rep #1)
+    - GSM8061538 (15-month-old male biol rep #2)
+    - GSM8061539 (15-month-old male biol rep #3)
+- AD:
+  - Female:
+    - GSM8061519 (15-month-old female biol rep #1)
+    - GSM8061520 (15-month-old female biol rep #2)
+    - GSM8061521 (15-month-old female biol rep #3)
+  - Male:
+    - GSM8061522 (15-month-old male biol rep #1)
+    - GSM8061523 (15-month-old male biol rep #2)
+    - GSM8061524 (15-month-old male biol rep #3)
+
+### 18 Months Mice:
+
+- Control:
+  - Female:
+    - GSM8061542 (18-month-old female biol rep #1)
+    - GSM8061543 (18-month-old female biol rep #2)
+    - GSM8061544 (18-month-old female biol rep #3)
+  - Male:
+    - GSM8061545 (18-month-old male biol rep #1)
+    - GSM8061546 (18-month-old male biol rep #2)
+    - GSM8061547 (18-month-old male biol rep #3)
+- AD:
+  - Female:
+    - GSM8061525 (18-month-old female biol rep #1)
+    - GSM8061526 (18-month-old female biol rep #2)
+    - GSM8061527 (18-month-old female biol rep #3)
+  - Male:
+    - GSM8061548 (18-month-old male biol rep #1)
+    - GSM8061549 (18-month-old male biol rep #2)
+    - GSM8061583 (18-month-old male biol rep #2)
+    - GSM8061584 (18-month-old male biol rep #3)
+
+### 21 Months Mice
+
+- Control:
+  - Female:
+    - GSM8061575 (21-month-old female biol rep #1)
+    - GSM8061578 (21-month-old female biol rep #2)
+    - GSM8061581 (21-month-old female biol rep #3)
+  - Male:
+    - GSM8061563 (21-month-old male biol rep #1)
+    - GSM8061568 (21-month-old male biol rep #2)
+    - GSM8061572 (21-month-old male biol rep #3)
+- AD:
+  - Female
+    - GSM8061550 (21-month-old female biol rep #1)
+    - GSM8061551 (21-month-old female biol rep #2)
+    - GSM8061552 (21-month-old female biol rep #3)
+    - GSM8061553 (21-month-old female biol rep #4)
+    - GSM8061554 (21-month-old female biol rep #5)
+
+### 24 Months Mice:
+
+- AD:
+  - Female:
+    - GSM8061559 (24-month-old female biol rep #1)
+    - GSM8061564 (24-month-old female biol rep #2)
+    - GSM8061569 (24-month-old female biol rep #3)
+
+
+
+```{r import data, warning=FALSE, message=FALSE}
+rm(list=ls())
+setwd("/Users/ziyiou/CUHKSZ/23 Fall/Genomics/longitudinal analysis")
+#library(GEOquery)
+data <- getGEO("GSE254970")
+gset <- data[[1]]
+exprs_data <- read.csv("/Users/ziyiou/CUHKSZ/23 Fall/Genomics/longitudinal analysis/data/Alzheimer mice/GSE254970_processed_data.csv", sep=",", header = TRUE)
+pdata <- pData(gset)
+#colnames(exprs_data) = pdata$geo_accession
+```
+
+In the raw data there are 24080 genes with a few duplicates. We deleted the duplicated ones here. Now there are 24022 genes left. 
+
+```{r delete}
+cat("Number of genes after deleting replicated ones:", length(unique(exprs_data[, 1])))
+duplicates <- duplicated(exprs_data[, 1])
+exprs_data <- exprs_data[!duplicates, ]
+rownames(exprs_data) <- exprs_data[, 1]
+exprs_data <- exprs_data[,-1]
+```
+
+## 1.3 Quality Control
+
+We conduct quality control (QC) to our data. Notably, the quality control of the scRNA-seq for reference profile is the same as here.
+
+
+```{r qc, warning=FALSE}
+# Keep only "detectable" genes: at least 5% of cells (regardless of the group) have a read/UMI count different from 0
+keep <- which(Matrix::rowSums(exprs_data > 0) >= round(0.05 * ncol(exprs_data)))
+exprs_data = exprs_data[keep,]
+cat("Number of genes after QC:", nrow(exprs_data))
+```
+
+
+# 2. Deconvolution of Cell Proportion
+
+## 2.1 Construction of reference matrix
+
+We used the mouse brain single cell RNA sequencing data from `GSE129788` to construct the single cell signature gene matrix, similar to Ren's work (2023). Specifically, we choose the `GSM3722100` and `GSM3722108` to construct reference profile.
+
+Ren's work: https://www.nature.com/articles/s41598-023-44183-7#Sec15
+
+Firstly we use `Seurat` to conduct clustering analysis on `GSM3722100` and `GSM3722108`. According to the supplementary file of `GSE129788` from GEO, there are 6 types of cells in this scRNA-seq, they are: IMMUNE_Lin (Immune Lineage), OLG_Lin (Oligodendrocyte Lineage), Neuron Lineage (NEURON_Lin), Vascular Lineage (VASC_Lin), Astrocyte Lineage (ASC_Lin) and Ependymal Cell Lineage (EPC_Lin). 
+
+```{r construct C, message=FALSE, warning=FALSE}
+m1 <- read.table("//Users/ziyiou/CUHKSZ/23 Fall/Genomics/longitudinal analysis/data/Alzheimer mice/GSM3722100_YX1L_10X.txt", sep = "\t")
+m2 <- read.table("/Users/ziyiou/CUHKSZ/23 Fall/Genomics/longitudinal analysis/data/Alzheimer mice/GSM3722108_OX1X_10X.txt", sep = "\t")
+
+##################### QC #####################
+
+# First: cells with library size, mitochondrial or ribosomal content further than three MAD away were discarded
+filterCells <- function(filterParam){
+	cellsToRemove <- which(filterParam > median(filterParam) + 3 * mad(filterParam) | filterParam < median(filterParam) - 3 * mad(filterParam) )
+	cellsToRemove
+}
+
+sc_data <- do.call(cbind, list(m1, m2))
+libSizes <- colSums(sc_data)
+gene_names <- rownames(sc_data)
+mtID <- grepl("^MT-|_MT-", gene_names, ignore.case = TRUE)
+rbID <- grepl("^RPL|^RPS|_RPL|_RPS", gene_names, ignore.case = TRUE)
+
+mtPercent <- colSums(sc_data[mtID, ])/libSizes
+rbPercent <- colSums(sc_data[rbID, ])/libSizes
+
+lapply(list(libSizes = libSizes, mtPercent = mtPercent, rbPercent = rbPercent), filterCells) %>% 
+	unlist() %>% 
+	unique() -> cellsToRemove
+
+if(length(cellsToRemove) != 0){
+	sc_data <- sc_data[,-cellsToRemove]
+}
+
+# Keep only "detectable" genes: at least 5% of cells (regardless of the group) have a read/UMI count different from 0
+keep <- which(Matrix::rowSums(sc_data > 0) >= round(0.05 * ncol(sc_data)))
+sc_data = sc_data[keep,]
+
+##################### Clustering #####################
+
+sc_seurat_obj <- CreateSeuratObject(counts = sc_data)
+
+sc_seurat_obj <- NormalizeData(sc_seurat_obj)
+sc_seurat_obj <- FindVariableFeatures(sc_seurat_obj, nfeatures = 2000)
+
+sc_seurat_obj <- ScaleData(sc_seurat_obj)
+
+# PCA
+sc_seurat_obj <- RunPCA(sc_seurat_obj, verbose=FALSE)
+VizDimLoadings(sc_seurat_obj, dims = 1:2, reduction = "pca")
+DimPlot(sc_seurat_obj, reduction = "pca") + NoLegend()
+DimHeatmap(sc_seurat_obj, dims = 1:10, cells = 500, balanced = TRUE)
+ElbowPlot(sc_seurat_obj)
+
+# Clustering
+sc_seurat_obj <- FindNeighbors(sc_seurat_obj, dims = 1:10)
+sc_seurat_obj <- FindClusters(sc_seurat_obj, resolution = 0.025)
+
+# find marker genes of each cluster
+cluster_markers <- FindAllMarkers(sc_seurat_obj, only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25, verbose = FALSE)
+
+# choose top marker
+top_markers <- cluster_markers %>%
+  group_by(cluster) %>%
+  top_n(n = 10, wt = avg_log2FC)
+
+top_genes <- top_markers %>% group_by(cluster) %>% top_n(n = 5, wt = avg_log2FC)
+#FeaturePlot(sc_seurat_obj, features = unique(top_genes$gene), cols = c("blue", "red"), reduction = "tsne")
+
+new_cluster_ids <- c("CellType1", "CellType2", "CellType3", "CellType4", "CellType5", "CellType6")
+names(new_cluster_ids) <- levels(sc_seurat_obj)
+sc_seurat_obj <- RenameIdents(sc_seurat_obj, new_cluster_ids)
+
+# bulk signature matrix
+average_expression <- AverageExpression(sc_seurat_obj)
+bulk_signature_matrix <- average_expression$RNA
+
+head(bulk_signature_matrix)
+write.csv(bulk_signature_matrix, "/Users/ziyiou/CUHKSZ/23 Fall/Genomics/longitudinal analysis/data/Alzheimer mice/signature_matrix bulk.csv")
+
+# sc signature matrix
+cell_ids <- colnames(sc_seurat_obj)
+cluster_ids <- sc_seurat_obj$seurat_clusters
+cell_types <- sc_seurat_obj@active.ident
+
+pheno_sc_data <- data.frame(
+  CellID = cell_ids,
+  ClusterID = cluster_ids,
+  CellType = cell_types,
+  stringsAsFactors = FALSE
+)
+
+pheno_sc_data$SubjectName <- ifelse(pheno_sc_data$CellID %in% colnames(m1), "m1", 
+                                     ifelse(pheno_sc_data$CellID %in% colnames(m2), "m2", NA))
+sc_seurat_obj$SubjectName <- pheno_sc_data$SubjectName
+sc_seurat_obj$CellType <- pheno_sc_data$CellType
+
+# Visualization
+sc_seurat_obj <- RunTSNE(sc_seurat_obj, dims = 1:10)
+DimPlot(sc_seurat_obj, reduction = "tsne", group.by = c("CellType", "SubjectName")) 
+
+# find variable feature (top 2,000)
+markers <- VariableFeatures(sc_seurat_obj)
+marker_distrib <- data.frame(genes = character(length(VariableFeatures(sc_seurat_obj))))
+marker_distrib$genes <- VariableFeatures(sc_seurat_obj)
+
+variable_gene_plot <- VariableFeaturePlot(sc_seurat_obj)
+variable_gene_plot_with_label <- LabelPoints(plot= variable_gene_plot, 
+            points = head(VariableFeatures(sc_seurat_obj), 10),
+            repel=TRUE, xnudge = 0, ynudge = 0)
+variable_gene_plot_with_label
+```
+
+## 2.2 Cell type deconvolution
+
+Here we apply `TOAST` for cell type deconvolution.
+
+```{r MuSiC, warning=FALSE}
+C = sc_data
+T = exprs_data
+pDataC = pheno_sc_data
+
+    ##########    MATRIX DIMENSION APPROPRIATENESS    ##########
+C_bulk = data.frame(bulk_signature_matrix)
+keep = intersect(rownames(C_bulk),rownames(T)) 
+C_bulk = C_bulk[keep,]
+T_bulk = T[keep,]
+
+
+C.eset <- Biobase::ExpressionSet(assayData = as.matrix(C),phenoData = Biobase::AnnotatedDataFrame(pDataC))
+T.eset <- Biobase::ExpressionSet(assayData = as.matrix(T))
+
+
+C.eset <- SingleCellExperiment(assays = list(counts = as.matrix(C)))
+colData(C.eset) <- DataFrame(assigned_cluster = pDataC$CellType, SubjectName = rownames(pDataC))
+
+
+
+#FARDEEP_RESULTS = t(FARDEEP::fardeep(C_bulk, T_bulk, nn = TRUE, intercept = TRUE, permn = 10, QN = FALSE)$abs.beta)
+#FARDEEP_RESULTS = apply(FARDEEP_RESULTS,2,function(x) x/sum(x))
+#head(FARDEEP_RESULTS[, 1:5])
+```
+
+```{r linseed, warning=FALSE, eval=FALSE}
+lo <- LinseedObject$new(T_bulk, samples=1:20, topGenes=10000)
+
+lo$calculatePairwiseLinearity()
+lo$calculateSpearmanCorrelation()
+lo$calculateSignificanceLevel(100)
+lo$significancePlot(0.01)
+
+lo$filterDatasetByPval(0.01)
+lo$svdPlot()
+
+lo$setCellTypeNumber(6)
+lo$project("full") # projecting full dataset
+lo$projectionPlot(color="filtered")
+
+lo$project("filtered")
+lo$smartSearchCorners(dataset="filtered", error="norm")
+
+lo$deconvolveByEndpoints()
+rownames(lo$proportions) <- c("CellType1", "CellType2", "CellType3", "CellType4", "CellType5", "CellType6")
+
+linseed_RESULTS <- data.frame(lo$proportions)
+linseed_RESULTS
+```
+
+
+```{r toast, warning=FALSE}
+#### TOAST
+CellType <- list(CellType1 = 1,
+                 CellType2 = 2,
+                 CellType3 = 3,
+                 CellType4 = 4,
+                 CellType5 = 5,
+                 CellType6 = 6)
+
+myMarker <- ChooseMarker(C_bulk, 
+                         CellType, 
+                         nMarkCT = 20,
+                         chooseSig = TRUE,
+                         verbose = FALSE)
+lapply(myMarker, head, 10)
+estProp_PRF <- MDeconv(T_bulk, myMarker,
+                epsilon = 1e-3, verbose = FALSE)$H
+head(estProp_PRF[, 1:5])
+```
+
+
+# 3. ISLET
+
+## 3.1 Overview of ISLET
+
+![](figure/Overview of ISLET.jpg) 
+An overview of our proposed method ISLET (Individual Specific celL typE referencing Tool). **A** ISLET takes repeatedly measured bulk RNA-seq data, cell type proportions (known or estimated), and disease status as the algorithm input. Additional covariates are optional. **B** By a hierarchical mixed-effect modeling, ISLET can iteratively retrieve individual-specific and cell-type-specific gene expression reference panels. The fixed effect is the group-level average and the random effect is the individual-level deviance from the group mean. **C** Given the individual-specific reference panel, ISLET can conduct test to identify cell-type-specific differentially expressed genes (csDEG)
+
+ISLET is formulated as a mixed-effect regression model:
+$$y = X\beta + Au + \epsilon$$
+
+## 3.2 Data preparation
+
+ISLET needs one input file organized into `SummarizedExperiment` objects, combining cases and controls. So we first convert data into SummarizedExperiment objects.
+
+
+The original data from GEO doesn't specify subject ID, so here we treat sample with the same sex, genotype and the same biological repeat number as the same subject. We manually name subject by sex(1 for female 2 for male)-genotype(0 for ctrl 1 for case)-bio rep. For example, a female mouse whose genotype is B6129 with bio rep #1 will be named 101.
+
+```{r info}
+######### colData:  sample meta-data & input cell type proportions #######
+
+### proportion
+proportion <- data.frame(t(estProp_PRF))
+rownames(proportion) <- pdata$geo_accession
+
+### meta-data
+pheno_bulk_data <- read.csv("/Users/ziyiou/CUHKSZ/23 Fall/Genomics/longitudinal analysis/data/Alzheimer mice/sample_pheno_data.csv", sep=",", row.names = 1)
+sample_info <- data.frame(group = ifelse(pdata$`genotype:ch1` == "B6;129S1/SvImJ", "ctrl", 
+                      ifelse(pdata$`genotype:ch1` == "3xTg-AD", "case", NA)),
+                      subject_ID = pheno_bulk_data$subject_ID,
+                      CellType1 = proportion$CellType1,
+                      CellType2 = proportion$CellType2,
+                      CellType3 = proportion$CellType3,
+                      CellType4 = proportion$CellType4,
+                      CellType5 = proportion$CellType5,
+                      CellType6 = proportion$CellType6
+                      )
+
+sample_info_age <- data.frame(group = ifelse(pdata$`genotype:ch1` == "B6;129S1/SvImJ", "ctrl", 
+                      ifelse(pdata$`genotype:ch1` == "3xTg-AD", "case", NA)),
+                      subject_ID = pheno_bulk_data$subject_ID,
+                          age = as.numeric(pdata$`age (months):ch1`),
+                      CellType1 = proportion$CellType1,
+                      CellType2 = proportion$CellType2,
+                      CellType3 = proportion$CellType3,
+                      CellType4 = proportion$CellType4,
+                      CellType5 = proportion$CellType5,
+                      CellType6 = proportion$CellType6
+                      )
+
+sample_info_age_sex <- data.frame(group = ifelse(pdata$`genotype:ch1` == "B6;129S1/SvImJ", "ctrl", 
+                      ifelse(pdata$`genotype:ch1` == "3xTg-AD", "case", NA)),
+                      subject_ID = pheno_bulk_data$subject_ID,
+                          age = as.numeric(pdata$`age (months):ch1`),
+                          sex = ifelse(pdata$`Sex:ch1` == "Female", 0, 
+                      ifelse(pdata$`Sex:ch1` == "Male", 1, NA)),
+                      # 0 for female, 1 for male
+                      CellType1 = proportion$CellType1,
+                      CellType2 = proportion$CellType2,
+                      CellType3 = proportion$CellType3,
+                      CellType4 = proportion$CellType4,
+                      CellType5 = proportion$CellType5,
+                      CellType6 = proportion$CellType6
+                      )
+rownames(sample_info) = pdata$geo_accession
+rownames(sample_info_age) = pdata$geo_accession
+rownames(sample_info_age_sex) = pdata$geo_accession
+
+
+sample_info <- sample_info %>% arrange(subject_ID) %>% arrange(group)
+sample_info_age <- sample_info_age %>% arrange(subject_ID) %>% arrange(group)
+sample_info_age_sex <- sample_info_age_sex %>% arrange(subject_ID) %>% arrange(group)
+
+######### counts: gene expression value data frame #########
+counts = T_bulk
+colnames(counts) = pdata$geo_accession
+sorted_row_names <- rownames(sample_info)
+counts <- data.frame(counts[ , sorted_row_names])
+```
+
+
+```{r summarized experiment}
+mice_se <- SummarizedExperiment(
+    assays = list(counts = counts),
+    colData = sample_info)
+# unique(colData(mice_se)$group)[1]
+
+mice_se_age <- SummarizedExperiment(
+    assays = list(counts = counts),
+    colData = sample_info_age)
+
+mice_se_age_sex <- SummarizedExperiment(
+    assays = list(counts = counts),
+    colData = sample_info_age_sex)
+```
+
+```{r data prep}
+# for mean
+input1 <- dataPrep(dat_se = mice_se)
+input1
+  
+# for slope(age)
+input2 <- dataPrepSlope(dat_se = mice_se_age)
+input2
+```
+
+
+## 3.3 Deconvolve individual-specific reference panel
+
+With the curated data `input1` from the previous step, now we can use `ISLET` to conduct deconvolution and obtain the individual-specific and cell-type-specific reference panels. This process can be achieved by running:
+
+```{r deconv}
+res.sol <- isletSolve(input=input1)
+```
+
+The total running time of `isletSolve` here is 6 min.
+
+The `res.sol` is the deconvolution result list. For both case and control group, the deconvolution result is a list of length K, where K is the number of cell types. For each of the K elements, it is a matrix of dimension G by N. For each of the K cell types, it stores the deconvoluted values in a feature (G) by subject (N) matrix.
+
+```{r # view deconv result}
+#View the deconvolution results
+caseVal <- caseEst(res.sol)
+ctrlVal <- ctrlEst(res.sol)
+#length(caseVal) #For cases, a list of 11 cell types' matrices. 
+#length(ctrlVal) #For controls, a list of 6 cell types' matrices.
+
+################## CellType 1 ##################
+
+## view the reference panels for CellType1, 
+## for the first 5 genes and first 4 subjects, in Case group.
+caseVal$CellType1[1:5, 1:4]
+
+## view the reference panels for CellType1, 
+## for the first 5 genes and first 4 subjects, in Control group.
+ctrlVal$CellType1[1:5, 1:4]
+
+################## CellType 2 ##################
+caseVal$CellType2[1:5, 1:4]
+ctrlVal$CellType2[1:5, 1:4]
+
+################## CellType 3 ##################
+caseVal$CellType3[1:5, 1:4]
+ctrlVal$CellType3[1:5, 1:4]
+
+################## CellType 4 ##################
+caseVal$CellType4[1:5, 1:4]
+ctrlVal$CellType4[1:5, 1:4]
+
+################## CellType 5 ##################
+caseVal$CellType5[1:5, 1:4]
+ctrlVal$CellType5[1:5, 1:4]
+
+################## CellType 6 ##################
+caseVal$CellType6[1:5, 1:4]
+ctrlVal$CellType6[1:5, 1:4]
+```
+
+
+## 3.4 Test cell-type-specific differential expression (csDE) in mean (intercept): test the group effect on individual reference panels
+
+Now we can test the group effect on individual reference panels, i.e., identifying csDE genes in mean or intercept. In this ‘intercept test’, we assume that the individual-specific reference panel is unchanged across time points. Note that the deconvolution in section **3.3** can be skipped, if one only need to call csDE genes. 
+
+The result `res.test` is a matrix of p-values, in the dimension of feature by cell type. Each element is the LRT p-value, by contrasting case group and control group, for one feature in one cell type.
+
+Total running time of `isletTest`: 40 min
+
+```{r 3.4}
+#Test for csDE genes
+res.test <- isletTest(input=input1)
+rownames(res.test) = rownames(counts)
+head(res.test)
+
+```
+
+
+## 3.5 Test csDE in change-rate (slope): 
+
+Given an additional continuous variable such as time or age, ISLET is able to compare cases and controls in the change-rate of reference profile over time. This is the ‘slope test’. Here, the assumption is that for the participants or subjects in a group, the individual reference profile could change over time, with change-rate fixed by group. At a given time point, there may be no (significant) group effect in the reference panel, but the participants still have distinct underlying reference profiles. Under this setting, it is of interest to test for such difference. Below is an example to detect reference panel change-rate difference between two groups, from data preparation to test.
+
+The result `age.test` is a matrix of p-values, in the dimension of feature by cell type. Each element is the LRT p-value, by contrasting case group and control group, for one feature in one cell type. In contrast to the (intercept) test described before, here is a test for difference of the expression CHANGE IN REFERENCE over time, between cases and controls.
+
+Total running time of `isletTest`: 32 min
+
+```{r 3.5, warning=FALSE, message=FALSE}
+age.test <- isletTest(input = input2)
+rownames(age.test) = rownames(counts)
+head(age.test)
+```
+
+
+## 3.6 imply: improving cell-type deconvolution accuracy using personalized reference profiles
+
+Total running time of `imply`: 3 min
+
+```{r imply}
+dat <- implyDataPrep(sim_se = mice_se)
+
+#Use imply for deconvolution
+result <- imply(dat)
+
+#View the subject-specific and cell-type-specific reference panels solved 
+#by linear mixed-effect models of the first subject
+head(result$p.ref[,,1])
+
+#View the improved cell deconvolution results
+head(result$imply.prop)
+tail(result$imply.prop)
+```
+
+```{r vis}
+toast_prop <- proportion[, -1]
+islet_prop <- result$imply.prop
+
+
+common_rownames <- intersect(rownames(toast_prop), rownames(islet_prop))
+toast_prop <- toast_prop[common_rownames, ]
+islet_prop <- islet_prop[common_rownames, ]
+
+heatmap_toast <- pheatmap(toast_prop, main = "TOAST Proportions", cluster_rows = F, cluster_cols = F,
+         show_rownames = F)
+heatmap_islet <- pheatmap(islet_prop, main = "ISLET Proportions", cluster_rows = F, cluster_cols = F,
+         show_rownames = F)
+
+grid.arrange(
+  heatmap_toast$gtable, 
+  heatmap_islet$gtable, 
+  ncol = 2
+)
+```
+
+
+# 4. Gene Sets Enrichment Analysis (GSEA)
+
+We use package `fgsea` to perform Gene Sets Enrichment Analysis (GSEA) across 45 candidate REACTOME pathways with size of at least 20 genes, using the rank of test statistics in each method.
+
+## 4.1 Top 20 variable genes in the bulk sample
+
+Here we are interested in the top 20 variable genes in the bulk sample. 
+
+```{r top 20 variable genes}
+gene_variability <- apply(counts, 1, sd)
+variability_df <- data.frame(gene = rownames(counts), variability = gene_variability)
+# sort according to variablity
+variability_df <- variability_df[order(variability_df$variability, decreasing = TRUE), ]
+top20_genes <- head(variability_df$gene, 20)
+custom_gene_set <- list(
+  "top20_variable_genes" = top20_genes
+)
+top20_counts <- counts[top20_genes, ]
+
+pheatmap(
+  top20_counts,
+  cluster_rows = TRUE,     # 是否对基因进行聚类
+  cluster_cols = F,     # 是否对样本进行聚类
+  scale = "row",           # 对行进行标准化
+  color = colorRampPalette(c("blue", "white", "red"))(50), # 热图颜色
+  main = "Heatmap of the Count of Top 20 Variable Genes"
+)
+```
+
+## 4.2 csDEG detection
+
+### 4.2.1 csDEG detected by `ISLET` using `TOAST` as input
+
+We convert the $\mathrm{p-value}$ acquired in the above section **3.5** into -log10 scale since the small p-values are essential in csDEG calling. The more significant the gene is, the bigger $-log_{10}(\mathrm{p-value})$ is. We visualize it by a heatmap.
+
+```{r vis_csDEG}
+#significant_gene_matrix <- age.test[rownames(age.test) %in% unlist(csDEG_list), ]
+
+pheatmap(-log10(age.test),
+         cluster_rows = TRUE,
+         cluster_cols = TRUE,
+         color = colorRampPalette(c("blue", "white", "red"))(50),
+         show_rownames = F,
+         main = "Heatmap of -log10(p-value) for csDEG")
+```
+
+We used BH procedure to control FDR in multiple testing, and then reported
+csDEG at FDR < 0.25. (In the `ISLET` paper, the author reported csDEG at FDR < 0.1, but here all the FDR we get is above 0.2, so we report csDEG at FDR < 0.25)
+
+Given that there are so many genes reported, we only explore the top 50 genes with least p-value, meaning that they are the most significant. We want to be stringent with the csDEGs, so we only keep csDEG that appear in only one cell type. 
+
+```{r csDEG}
+p_values_long <- as.data.frame(as.table(age.test))
+colnames(p_values_long) <- c("Gene", "CellType", "PValue")
+p_values_long$FDR <- p.adjust(p_values_long$PValue, method = "BH")
+
+csDEG <- p_values_long %>%
+  filter(FDR < 0.25)
+
+
+top_csDEG <- csDEG %>%
+  group_by(CellType) %>%
+  arrange(CellType, PValue) %>%
+  slice_head(n = 50) %>%
+  ungroup()
+
+gene_list_by_celltype <- top_csDEG %>%
+  split(.$CellType) %>%
+  lapply(function(df) df$Gene)
+
+#gene_list_by_celltype
+```
+
+
+```{r heatmap for top 20 csDEG}
+# 计算 -log(p-value)
+top_csDEG <- top_csDEG %>%
+  mutate(NegLogPValue = -log10(PValue))
+
+# 准备绘图数据：宽格式
+heatmap_data <- top_csDEG %>%
+  dplyr::select(CellType, Gene, NegLogPValue) %>%
+  pivot_wider(names_from = CellType, values_from = NegLogPValue)
+
+```
+
+```{r gene_count_cell}
+# 计算每个基因在不同细胞类型中的出现次数
+gene_celltype_count <- heatmap_data %>%
+  pivot_longer(-Gene, names_to = "CellType", values_to = "NegLogPValue") %>%
+  filter(!is.na(NegLogPValue)) %>%  # 只考虑非 NA 值
+  group_by(Gene) %>%
+  summarise(CellTypeCount = n_distinct(CellType)) %>%
+  filter(CellTypeCount == 1)  # 筛选仅在一种细胞类型中出现的基因
+
+# 将这些基因与原数据进行合并，找出这些基因所在的细胞类型
+unique_genes <- gene_celltype_count$Gene
+unique_genes_data <- heatmap_data %>%
+  pivot_longer(-Gene, names_to = "CellType", values_to = "NegLogPValue") %>%
+  filter(Gene %in% unique_genes, !is.na(NegLogPValue)) %>%
+  dplyr::select(CellType, Gene)
+
+# 创建一个按细胞类型整理的命名列表，每个元素是一个基因向量
+gene_list_by_celltype <- unique_genes_data %>%
+  group_by(CellType) %>%
+  summarise(Genes = list(Gene), .groups = 'drop')
+
+# 将结果转换为命名列表
+gene_list_by_celltype_named_list <- setNames(
+  lapply(gene_list_by_celltype$Genes, function(x) x),
+  gene_list_by_celltype$CellType
+)
+
+# 打印结果
+print(gene_list_by_celltype_named_list)
+```
+
+
+#### CellType 1
+
+The csDEG detected by `ISLET` for CellType1 is "Ly6g6f".
+
+```{r c1 islet}
+# 提取感兴趣的基因
+genes_of_interest1_i <- c("Ly6g6f")
+counts_subset1_i <- counts[genes_of_interest1_i, ]
+
+# 转置 counts 数据框，使得基因为行，样本为列
+counts_long1_i <- as.data.frame(t(counts_subset1_i))
+counts_long1_i$Sample_ID <- rownames(counts_long1_i)
+
+# 将 counts_long 和 sample_info_age_sex 合并
+data_combined1_i <- merge(counts_long1_i, sample_info_age_sex, by.x = "Sample_ID", by.y = "row.names")
+
+# 将数据从宽格式转换为长格式
+data_long1_i <- data_combined1_i %>%
+  pivot_longer(cols = starts_with("Ly6g6f"),
+               names_to = "gene",
+               values_to = "count")
+
+
+# 汇总数据
+data_summarized1_i <- data_long1_i %>%
+  group_by(age, group, gene) %>%
+  summarise(total_count = sum(count, na.rm = TRUE), .groups = 'drop') %>%
+  mutate(log2_count = log2(total_count + 1)) # 添加1以避免log2(0)
+
+# 创建一个基因列表
+genes1_i <- c("Ly6g6f")
+
+# 绘图函数
+plot_gene <- function(gene_name, data) {
+  ggplot(data %>% filter(gene == gene_name), aes(x = age, y = log2_count, color = group, group = group)) +
+    geom_line() +
+    geom_point() +
+    labs(title = paste("Gene:", gene_name),
+         x = "Age (Month)",
+         y = "Log2(Count)") +
+    theme_minimal()
+}
+
+# 绘制每个基因的图
+plots1_i <- lapply(genes1_i, function(gene) {
+  plot_gene(gene, data_summarized1_i)
+})
+
+# 保存或展示图形
+library(gridExtra)
+do.call(grid.arrange, c(plots1_i))
+
+#for (i in 1:length(plots)) {
+#  ggsave(filename = paste0(genes[i], "_plot.png"), plot = plots[[i]], width = 8, height = 6)}
+
+```
+
+There are papers suggesting that subject carrying CRN mutation (S+m+) will observe increase in "Ly6g6f" (https://www.sciencedirect.com/science/article/pii/S0197458012005933). Mutation in the progranulin gene (GRN) can cause frontotemporal dementia (FTD).
+
+In regard to **"Ly6g6f"**, the higher the gene expression the greater was the atrophy in right superior frontal gyrus.
+
+#### CellType 2
+
+```{r c2 islet}
+# 提取感兴趣的基因
+genes_of_interest2_i <- c("Rtp4", "Sult1a1")
+counts_subset2_i <- counts[genes_of_interest2_i, ]
+
+# 转置 counts 数据框，使得基因为行，样本为列
+counts_long2_i <- as.data.frame(t(counts_subset2_i))
+counts_long2_i$Sample_ID <- rownames(counts_long2_i)
+
+# 将 counts_long 和 sample_info_age_sex 合并
+data_combined2_i <- merge(counts_long2_i, sample_info_age_sex, by.x = "Sample_ID", by.y = "row.names")
+
+# 将数据从宽格式转换为长格式
+data_long2_i <- data_combined2_i %>%
+  pivot_longer(cols = starts_with("Rtp4") | starts_with("Sult1a1"),
+               names_to = "gene",
+               values_to = "count")
+
+
+# 汇总数据
+data_summarized2_i <- data_long2_i %>%
+  group_by(age, group, gene) %>%
+  summarise(total_count = sum(count, na.rm = TRUE), .groups = 'drop') %>%
+  mutate(log2_count = log2(total_count + 1)) # 添加1以避免log2(0)
+
+# 创建一个基因列表
+genes2_i <- c("Rtp4", "Sult1a1")
+
+
+# 绘制每个基因的图
+plots2_i <- lapply(genes2_i, function(gene) {
+  plot_gene(gene, data_summarized2_i)
+})
+
+# 保存或展示图形
+library(gridExtra)
+do.call(grid.arrange, c(plots2_i, ncol = 2))
+
+#for (i in 1:length(plots)) {
+#  ggsave(filename = paste0(genes[i], "_plot.png"), plot = plots[[i]], width = 8, height = 6)}
+
+```
+
+**"Rtp4"** is a host gene (receptor transporter protein 4 [RTP4]) that can regulate host type I interferon responses and symptoms of experimental cerebral malaria. It's a potential target for therapy in some neurological diseases. (https://www.ncbi.nlm.nih.gov/pmc/articles/PMC7431001/) "Rtp4" is also discovered as the Top 10 most significantly differentially expressed genes in APP-PS1 +antiCD8 mice compared to APP-PS1+PBS (https://www.sciencedirect.com/science/article/pii/S0889159119315739).
+
+**"suly1a1"** (human sulfotransferase 1A1) has been reported as a new target for structure-based design of drugs to treat cancer according to https://www.cell.com/biophysj/pdf/S0006-3495(21)02756-9.pdf. It encodes an enzyme capable of transferring sulfate groups to a wide variety of endogenous and exogenous compounds, which makes them more water-soluble and easier to excrete. Currently there are NO paper available for pointing out a direct relation between this gene and Alzheimer.
+
+#### CellType 3
+```{r c3 islet}
+# 提取感兴趣的基因
+genes_of_interest3_i <- c("Rnaset2b", "Adipor2",  "Sertad1",  "Cpm",  "Dusp6",  "Lifr", "Banp",
+                          "Fkbp5",  "Irs2",     "Kcnj10")
+counts_subset3_i <- counts[genes_of_interest3_i, ]
+
+# 转置 counts 数据框，使得基因为行，样本为列
+counts_long3_i <- as.data.frame(t(counts_subset3_i))
+counts_long3_i$Sample_ID <- rownames(counts_long3_i)
+
+# 将 counts_long 和 sample_info_age_sex 合并
+data_combined3_i <- merge(counts_long3_i, sample_info_age_sex, by.x = "Sample_ID", by.y = "row.names")
+
+# 将数据从宽格式转换为长格式
+data_long3_i <- data_combined3_i %>%
+  pivot_longer(cols = starts_with("Rnaset2b") | starts_with("Adipor2") | starts_with("Sertad1") | starts_with("Cpm") | starts_with("Dusp6") | starts_with("Lifr") | starts_with("Banp") | starts_with("Fkbp5") | starts_with("Irs2") | starts_with("Kcnj10"),
+               names_to = "gene",
+               values_to = "count")
+
+
+# 汇总数据
+data_summarized3_i <- data_long3_i %>%
+  group_by(age, group, gene) %>%
+  summarise(total_count = sum(count, na.rm = TRUE), .groups = 'drop') %>%
+  mutate(log2_count = log2(total_count + 1)) # 添加1以避免log2(0)
+
+# 创建一个基因列表
+genes3_i <- c("Rnaset2b", "Adipor2",  "Sertad1",  "Cpm",  "Dusp6",  "Lifr", "Banp",
+                          "Fkbp5",  "Irs2",     "Kcnj10")
+
+
+# 绘制每个基因的图
+plots3_i <- lapply(genes3_i, function(gene) {
+  plot_gene(gene, data_summarized3_i)
+})
+
+# 保存或展示图形
+library(gridExtra)
+do.call(grid.arrange, c(plots3_i, ncol = 3))
+
+#for (i in 1:length(plots)) {
+#  ggsave(filename = paste0(genes[i], "_plot.png"), plot = plots[[i]], width = 8, height = 6)}
+
+```
+
+**"Rnaset2b"** is a orthologues of the single human RNASET2 gene, presenting on chromosome 17 in the mouse genome. In the CNS, adaptive immune cells and clonally expanded effector memory CD8+ T cells have come into focus in the pathogenesis of aging and Alzheimer’s disease. The observed neuroinflammatory response in Rnaset2−/− mice with considerable numbers of CD8+ T cells exceeds the bystander effects observed in many neurodegenerative disease models. (https://www.nature.com/articles/s41467-021-26880-x)
+
+**"Adipor2"** (adiponectin receptor 2) is a receptor targeted by Adiponectin. Activation of AdipoR1 and AdipoR2 receptors can trigger various signaling pathways, such as the 5ʹadenosine monophosphate-activated protein kinase (AMPK) and Nuclear Factor-kappa B (NF-κB) pathways. The peripheral actions of adiponectin comprise the regulation of glucose and lipid metabolism, as well as the modulation of inflammation, which both play a substantial role in **AD pathophysiology**. (https://www.sciencedirect.com/science/article/pii/S1279770724002409)
+
+#### CellType 4
+```{r c4 islet}
+# 提取感兴趣的基因
+genes_of_interest4_i <- c("Ddx3y",  "Sdf2l1",  "Fam177a")
+counts_subset4_i <- counts[genes_of_interest4_i, ]
+
+# 转置 counts 数据框，使得基因为行，样本为列
+counts_long4_i <- as.data.frame(t(counts_subset4_i))
+counts_long4_i$Sample_ID <- rownames(counts_long4_i)
+
+# 将 counts_long 和 sample_info_age_sex 合并
+data_combined4_i <- merge(counts_long4_i, sample_info_age_sex, by.x = "Sample_ID", by.y = "row.names")
+
+# 将数据从宽格式转换为长格式
+data_long4_i <- data_combined4_i %>%
+  pivot_longer(cols = starts_with("Ddx3y") | starts_with("Sdf2l1") | starts_with("Fam177a"),
+               names_to = "gene",
+               values_to = "count")
+
+
+# 汇总数据
+data_summarized4_i <- data_long4_i %>%
+  group_by(age, group, gene) %>%
+  summarise(total_count = sum(count, na.rm = TRUE), .groups = 'drop') %>%
+  mutate(log2_count = log2(total_count + 1)) # 添加1以避免log2(0)
+
+# 创建一个基因列表
+genes4_i <- c("Ddx3y",  "Sdf2l1",  "Fam177a")
+
+
+# 绘制每个基因的图
+plots4_i <- lapply(genes4_i, function(gene) {
+  plot_gene(gene, data_summarized4_i)
+})
+
+# 保存或展示图形
+library(gridExtra)
+do.call(grid.arrange, c(plots4_i, ncol=2))
+
+#for (i in 1:length(plots)) {
+#  ggsave(filename = paste0(genes[i], "_plot.png"), plot = plots[[i]], width = 8, height = 6)}
+
+```
+
+**"Ddx3y"** is a gene located on the Y chromosome that encodes a member of the DEAD-box RNA helicase family that is active in male germ cells. It encodes a translation initiation factor thought to stabilize the binding of initiation Met-tRNA to the ribosome. A research suggests that the expression of "Ddx3y" will increase in AD patients. (https://www.ncbi.nlm.nih.gov/pmc/articles/PMC6981840/).
+
+**"Sdf2l1"** is a protein coding gene. It's reported to be significantly upregulated in enrichment analysis in AD patients. (https://www.sciencedirect.com/science/article/pii/S2666354621000302) (https://www.ncbi.nlm.nih.gov/pmc/articles/PMC9197405/)
+
+
+#### CellType 5
+
+
+```{r c5 islet}
+# 提取感兴趣的基因
+genes_of_interest5_i <- c("Ctla2a")
+counts_subset5_i <- counts[genes_of_interest5_i, ]
+
+# 转置 counts 数据框，使得基因为行，样本为列
+counts_long5_i <- as.data.frame(t(counts_subset5_i))
+counts_long5_i$Sample_ID <- rownames(counts_long5_i)
+
+# 将 counts_long 和 sample_info_age_sex 合并
+data_combined5_i <- merge(counts_long5_i, sample_info_age_sex, by.x = "Sample_ID", by.y = "row.names")
+
+# 将数据从宽格式转换为长格式
+data_long5_i <- data_combined5_i %>%
+  pivot_longer(cols = starts_with("Ctla2a"),
+               names_to = "gene",
+               values_to = "count")
+
+
+# 汇总数据
+data_summarized5_i <- data_long5_i %>%
+  group_by(age, group, gene) %>%
+  summarise(total_count = sum(count, na.rm = TRUE), .groups = 'drop') %>%
+  mutate(log2_count = log2(total_count + 1)) # 添加1以避免log2(0)
+
+# 创建一个基因列表
+genes5_i <- c("Ctla2a")
+
+
+# 绘制每个基因的图
+plots5_i <- lapply(genes5_i, function(gene) {
+  plot_gene(gene, data_summarized5_i)
+})
+
+# 保存或展示图形
+library(gridExtra)
+do.call(grid.arrange, c(plots5_i))
+
+#for (i in 1:length(plots)) {
+#  ggsave(filename = paste0(genes[i], "_plot.png"), plot = plots[[i]], width = 8, height = 6)}
+
+```
+
+In a research that demonstrated the induction of cognitive dysfunction induced by Sev in mice to corroborate the signaling pathway and the differentially expressed genes (DEGs), **"Ctla2a"** is significantly upregulated. Sevoflurane is a common anesthetic widely used in clinical practice, while Anesthetics could induce cognitive dysfunctions, such as Alzheimer's disease in humans or mice. (https://pubmed.ncbi.nlm.nih.gov/31134678/)
+
+
+#### CellType 6
+
+```{r c6 islet}
+# 提取感兴趣的基因
+genes_of_interest6_i <- c("Slc40a1",  "Plpp6", "Gt(ROSA)26Sor",  "Abhd6", "Ndufaf4", "Bloc1s6",
+                          "Pmepa1", "Rps19bp1", "Spred1", "Pcnp"  )
+counts_subset6_i <- counts[genes_of_interest6_i, ]
+
+# 转置 counts 数据框，使得基因为行，样本为列
+counts_long6_i <- as.data.frame(t(counts_subset6_i))
+counts_long6_i$Sample_ID <- rownames(counts_long6_i)
+
+# 将 counts_long 和 sample_info_age_sex 合并
+data_combined6_i <- merge(counts_long6_i, sample_info_age_sex, by.x = "Sample_ID", by.y = "row.names")
+
+# 将数据从宽格式转换为长格式
+data_long6_i <- data_combined6_i %>%
+  pivot_longer(cols = starts_with("Slc40a1") | starts_with("Plpp6") | starts_with("Gt(ROSA)26Sor") | starts_with("Abhd6") | starts_with("Ndufaf4") | starts_with("Bloc1s6") | starts_with("Pmepa1") | starts_with("Rps19bp1") | starts_with("Spred1") | starts_with("Pcnp"),
+               names_to = "gene",
+               values_to = "count")
+
+
+# 汇总数据
+data_summarized6_i <- data_long6_i %>%
+  group_by(age, group, gene) %>%
+  summarise(total_count = sum(count, na.rm = TRUE), .groups = 'drop') %>%
+  mutate(log2_count = log2(total_count + 1)) # 添加1以避免log2(0)
+
+# 创建一个基因列表
+genes6_i <- c("Slc40a1",  "Plpp6", "Gt(ROSA)26Sor",  "Abhd6", "Ndufaf4", "Bloc1s6",
+                          "Pmepa1", "Rps19bp1", "Spred1", "Pcnp"  )
+
+
+# 绘制每个基因的图
+plots6_i <- lapply(genes6_i, function(gene) {
+  plot_gene(gene, data_summarized6_i)
+})
+
+# 保存或展示图形
+library(gridExtra)
+do.call(grid.arrange, c(plots6_i, ncol = 3))
+
+#for (i in 1:length(plots)) {
+#  ggsave(filename = paste0(genes[i], "_plot.png"), plot = plots[[i]], width = 8, height = 6)}
+
+```
+
+**"Slc40a1"** is (Solute Carrier Family 40 Member 1) is a Protein Coding gene. It is the only mammalian nonheme cellular iron exporter identified to date. It transports iron from iron storage cells into the blood to optimize systemic iron homeostasis. Mice with global deletion of "Slc40a1" are embryonically lethal, suggesting the essential role of "Slc40a1" in development. In the central nervous system, "Slc40a1" is distributed in most cell types, including neurons, astrocytes, oligodendrocytes, and brain microvascular endothelial cells. It is also essential for mouse embryonic development, forebrain patterning and neural tube closure. Previous studies have shown that "Slc40a1" is likely downregulated in the brain tissues of AD patients and APPswe/PS1dE9 mice.(https://www.nature.com/articles/s41418-020-00685-9)
+
+**"Plpp6"** (Phospholipid Phosphatase 6) is a Protein Coding gene. It's identified as MLR-associated ALS genes by a machine learning tool `RefMap` (https://www.ncbi.nlm.nih.gov/pmc/articles/PMC8709890/). Age-associated neurodegenerative diseases such as amyotrophic lateral sclerosis (ALS), Parkinson's disease (PD) and Alzheimer's disease (AD) are an unmet health need, with significant economic and societal implications, and an ever-increasing prevalence. Membrane lipid rafts (MLRs) are specialised plasma membrane microdomains that provide a platform for intracellular trafficking and signal transduction, particularly within neurons.
+
+
+### 4.2.2 csDEG detected by `TOAST`
+
+#### CellType 1
+
+```{r ct1 toast}
+# 提取感兴趣的基因
+genes_of_interest1 <- c("Cldn11","Ermn","Mog","Opalin","Ppp1r14a","Mag",
+                        "Hapln2","Aspa","Gjb1","Slain1")
+counts_subset1 <- counts[genes_of_interest1, ]
+
+# 转置 counts 数据框，使得基因为行，样本为列
+counts_long1 <- as.data.frame(t(counts_subset1))
+counts_long1$Sample_ID <- rownames(counts_long1)
+
+# 将 counts_long 和 sample_info_age_sex 合并
+data_combined1 <- merge(counts_long1, sample_info_age_sex, by.x = "Sample_ID", by.y = "row.names")
+
+# 将数据从宽格式转换为长格式
+data_long1 <- data_combined1 %>%
+  pivot_longer(cols = starts_with("Cldn11") | starts_with("Ermn") | starts_with("Mog") | starts_with("Opalin") | starts_with("Ppp1r14a") | starts_with("Mag") | starts_with("Hapln2") | starts_with("Aspa") | starts_with("Gjb1") | starts_with("Slain1"),
+               names_to = "gene",
+               values_to = "count")
+
+
+# 汇总数据
+data_summarized1 <- data_long1 %>%
+  group_by(age, group, gene) %>%
+  summarise(total_count = sum(count, na.rm = TRUE), .groups = 'drop') %>%
+  mutate(log2_count = log2(total_count + 1)) # 添加1以避免log2(0)
+
+# 创建一个基因列表
+genes1 <- c("Cldn11","Ermn","Mog","Opalin","Ppp1r14a","Mag",
+                        "Hapln2","Aspa","Gjb1","Slain1")
+
+
+
+# 绘制每个基因的图
+plots1 <- lapply(genes1, function(gene) {
+  plot_gene(gene, data_summarized1)
+})
+
+# 保存或展示图形
+library(gridExtra)
+do.call(grid.arrange, c(plots1, ncol = 3))
+
+#for (i in 1:length(plots)) {
+#  ggsave(filename = paste0(genes[i], "_plot.png"), plot = plots[[i]], width = 8, height = 6)}
+
+```
+
+
+#### CellType 2
+
+```{r ct2 toast}
+# 提取感兴趣的基因
+genes_of_interest2 <- c("Gja1","Gjb6" ,"Aqp4","Acsbg1"," Fxyd1","Slc6a11","Slc7a10","Fgfr3",  "Sox9", "Ntsr2" )
+counts_subset2 <- counts[genes_of_interest2, ]
+
+# 转置 counts 数据框，使得基因为行，样本为列
+counts_long2 <- as.data.frame(t(counts_subset2))
+counts_long2$Sample_ID <- rownames(counts_long2)
+
+# 将 counts_long 和 sample_info_age_sex 合并
+data_combined2 <- merge(counts_long2, sample_info_age_sex, by.x = "Sample_ID", by.y = "row.names")
+
+# 将数据从宽格式转换为长格式
+data_long2 <- data_combined2 %>%
+  pivot_longer(cols = starts_with("Gja1") | starts_with("Gjb6") | starts_with("Aqp4") | starts_with("Acsbg1") | starts_with("Fxyd1") | starts_with("Slc6a11") | starts_with("Slc7a10") | starts_with("Fgfr3") | starts_with("Sox9") | starts_with("Ntsr2"),
+               names_to = "gene",
+               values_to = "count")
+
+
+# 汇总数据
+data_summarized2 <- data_long2 %>%
+  group_by(age, group, gene) %>%
+  summarise(total_count = sum(count, na.rm = TRUE), .groups = 'drop') %>%
+  mutate(log2_count = log2(total_count + 1)) # 添加1以避免log2(0)
+
+# 创建一个基因列表
+genes2 <- c("Gja1","Gjb6" ,"Aqp4","Acsbg1"," Fxyd1",
+            "Slc6a11","Slc7a10","Fgfr3",  "Sox9", "Ntsr2" )
+
+
+
+# 绘制每个基因的图
+plots2 <- lapply(genes2, function(gene) {
+  plot_gene(gene, data_summarized2)
+})
+
+# 保存或展示图形
+library(gridExtra)
+do.call(grid.arrange, c(plots2, ncol = 3))
+
+#for (i in 1:length(plots)) {
+#  ggsave(filename = paste0(genes[i], "_plot.png"), plot = plots[[i]], width = 8, height = 6)}
+
+```
+
+
+#### CellType 3
+```{r ct3 toast}
+# 提取感兴趣的基因
+genes_of_interest3 <- c("Syt1" ,  "Synpr" , "Gad1"  ,
+                        "Ndrg4" , "Scg2"  , "Camk2b",
+                        "Grin2b", "Atp1a3","Snap25","Gad2")
+counts_subset3 <- counts[genes_of_interest3, ]
+
+# 转置 counts 数据框，使得基因为行，样本为列
+counts_long3 <- as.data.frame(t(counts_subset3))
+counts_long3$Sample_ID <- rownames(counts_long3)
+
+# 将 counts_long 和 sample_info_age_sex 合并
+data_combined3 <- merge(counts_long3, sample_info_age_sex, by.x = "Sample_ID", by.y = "row.names")
+
+# 将数据从宽格式转换为长格式
+data_long3 <- data_combined3 %>%
+  pivot_longer(cols = starts_with("Syt1") | starts_with("Synpr") | starts_with("Gad1") | starts_with("Ndrg4") | starts_with("Scg2") | starts_with("Camk2b") | starts_with("Grin2b") | starts_with("Atp1a3") | starts_with("Snap25") | starts_with("Gad2"),
+               names_to = "gene",
+               values_to = "count")
+
+
+# 汇总数据
+data_summarized3 <- data_long3 %>%
+  group_by(age, group, gene) %>%
+  summarise(total_count = sum(count, na.rm = TRUE), .groups = 'drop') %>%
+  mutate(log2_count = log2(total_count + 1)) # 添加1以避免log2(0)
+
+# 创建一个基因列表
+genes3 <- c("Syt1" ,  "Synpr" , "Gad1"  ,
+                        "Ndrg4" , "Scg2"  , "Camk2b",
+                        "Grin2b", "Atp1a3","Snap25","Gad2")
+
+
+
+# 绘制每个基因的图
+plots3 <- lapply(genes3, function(gene) {
+  plot_gene(gene, data_summarized3)
+})
+
+# 保存或展示图形
+library(gridExtra)
+do.call(grid.arrange, c(plots3, ncol = 3))
+
+#for (i in 1:length(plots)) {
+#  ggsave(filename = paste0(genes[i], "_plot.png"), plot = plots[[i]], width = 8, height = 6)}
+
+```
+
+
+#### CellType 4
+```{r ct4 toast}
+# 提取感兴趣的基因
+genes_of_interest4 <- c("Ly6c1" ,  "Ly6a"  ,  "Cldn5"  , "Flt1" ,
+                        "Pglyrp1" ,"Slco1a4" ,"Itm2a" ,  "Egfl7", 
+                        "Cxcl12" , "Hspb1"  )
+counts_subset4 <- counts[genes_of_interest4, ]
+
+# 转置 counts 数据框，使得基因为行，样本为列
+counts_long4 <- as.data.frame(t(counts_subset4))
+counts_long4$Sample_ID <- rownames(counts_long4)
+
+# 将 counts_long 和 sample_info_age_sex 合并
+data_combined4 <- merge(counts_long4, sample_info_age_sex, by.x = "Sample_ID", by.y = "row.names")
+
+# 将数据从宽格式转换为长格式
+data_long4 <- data_combined4 %>%
+  pivot_longer(cols = starts_with("Ly6c1") | starts_with("Ly6a") | starts_with("Cldn5") | starts_with("Flt1") | starts_with("Pglyrp1") | starts_with("Slco1a4") | starts_with("Itm2a") | starts_with("Egfl7") | starts_with("Cxcl12") | starts_with("Hspb1"),
+               names_to = "gene",
+               values_to = "count")
+
+
+# 汇总数据
+data_summarized4 <- data_long4 %>%
+  group_by(age, group, gene) %>%
+  summarise(total_count = sum(count, na.rm = TRUE), .groups = 'drop') %>%
+  mutate(log2_count = log2(total_count + 1)) # 添加1以避免log2(0)
+
+# 创建一个基因列表
+genes4 <- c("Ly6c1" ,  "Ly6a"  ,  "Cldn5"  , "Flt1" ,
+                        "Pglyrp1" ,"Slco1a4" ,"Itm2a" ,  "Egfl7", 
+                        "Cxcl12" , "Hspb1"  )
+
+
+
+# 绘制每个基因的图
+plots4 <- lapply(genes4, function(gene) {
+  plot_gene(gene, data_summarized4)
+})
+
+# 保存或展示图形
+library(gridExtra)
+do.call(grid.arrange, c(plots4, ncol = 3))
+
+#for (i in 1:length(plots)) {
+#  ggsave(filename = paste0(genes[i], "_plot.png"), plot = plots[[i]], width = 8, height = 6)}
+
+```
+
+
+#### CellType 5
+```{r ct5 toast}
+# 提取感兴趣的基因
+genes_of_interest5 <- c("C1qa" ,  "C1qc"  , "Ctss"   ,"C1qb"  ,
+                        "Tyrobp", "Trem2" , "Fcer1g", "Selplg" ,"P2ry12","Csf1r" )
+counts_subset5 <- counts[genes_of_interest5, ]
+
+# 转置 counts 数据框，使得基因为行，样本为列
+counts_long5 <- as.data.frame(t(counts_subset5))
+counts_long5$Sample_ID <- rownames(counts_long5)
+
+# 将 counts_long 和 sample_info_age_sex 合并
+data_combined5 <- merge(counts_long5, sample_info_age_sex, by.x = "Sample_ID", by.y = "row.names")
+
+# 将数据从宽格式转换为长格式
+data_long5 <- data_combined5 %>%
+  pivot_longer(cols = starts_with("C1qa") | starts_with("C1qc") | starts_with("Ctss") | starts_with("C1qb") | starts_with("Tyrobp") | starts_with("Trem2") | starts_with("Fcer1g") | starts_with("Selplg") | starts_with("P2ry12") | starts_with("Csf1r"),
+               names_to = "gene",
+               values_to = "count")
+
+
+# 汇总数据
+data_summarized5 <- data_long5 %>%
+  group_by(age, group, gene) %>%
+  summarise(total_count = sum(count, na.rm = TRUE), .groups = 'drop') %>%
+  mutate(log2_count = log2(total_count + 1)) # 添加1以避免log2(0)
+
+# 创建一个基因列表
+genes5 <- c("C1qa" ,  "C1qc"  , "Ctss"   ,"C1qb"  ,
+                        "Tyrobp", "Trem2" , "Fcer1g", "Selplg" ,"P2ry12","Csf1r" )
+
+
+
+# 绘制每个基因的图
+plots5 <- lapply(genes5, function(gene) {
+  plot_gene(gene, data_summarized5)
+})
+
+# 保存或展示图形
+library(gridExtra)
+do.call(grid.arrange, c(plots5, ncol = 3))
+
+#for (i in 1:length(plots)) {
+#  ggsave(filename = paste0(genes[i], "_plot.png"), plot = plots[[i]], width = 8, height = 6)}
+
+```
+
+
+#### CellType 6
+```{r ct6 toast}
+# 提取感兴趣的基因
+genes_of_interest6 <- c("C1ql1" , "Tnr" , "Matn4" , "Pcdh15" ,
+                        "Cacng4", "Cdo1" ,"Nxph1" , "Xylt1" , "Sulf2","Qpct")
+counts_subset6 <- counts[genes_of_interest6, ]
+
+# 转置 counts 数据框，使得基因为行，样本为列
+counts_long6 <- as.data.frame(t(counts_subset6))
+counts_long6$Sample_ID <- rownames(counts_long6)
+
+# 将 counts_long 和 sample_info_age_sex 合并
+data_combined6 <- merge(counts_long6, sample_info_age_sex, by.x = "Sample_ID", by.y = "row.names")
+
+# 将数据从宽格式转换为长格式
+data_long6 <- data_combined6 %>%
+  pivot_longer(cols = starts_with("C1ql1") | starts_with("Tnr") | starts_with("Matn4") | starts_with("Pcdh15") | starts_with("Cacng4") | starts_with("Cdo1") | starts_with("Nxph1") | starts_with("Xylt1") | starts_with("Sulf2") | starts_with("Qpct"),
+               names_to = "gene",
+               values_to = "count")
+
+
+# 汇总数据
+data_summarized6 <- data_long6 %>%
+  group_by(age, group, gene) %>%
+  summarise(total_count = sum(count, na.rm = TRUE), .groups = 'drop') %>%
+  mutate(log2_count = log2(total_count + 1)) # 添加1以避免log2(0)
+
+# 创建一个基因列表
+genes6 <- c("C1ql1" , "Tnr" , "Matn4" , "Pcdh15" ,
+                        "Cacng4", "Cdo1" ,"Nxph1" , "Xylt1" , "Sulf2","Qpct")
+
+
+
+# 绘制每个基因的图
+plots6 <- lapply(genes6, function(gene) {
+  plot_gene(gene, data_summarized6)
+})
+
+# 保存或展示图形
+library(gridExtra)
+do.call(grid.arrange, c(plots6, ncol = 3))
+
+#for (i in 1:length(plots)) {
+#  ggsave(filename = paste0(genes[i], "_plot.png"), plot = plots[[i]], width = 8, height = 6)}
+
+```
+
+
+
+## 4.3 Enrichment analysis
+
+Finally we conduct the enrichment analysis by `fgsea`.
+
+```{r enrichment analysis}
+
+```
+
+
+
+
+# 5. Individual-wise study
+
+## 5.1 Cell proportion of certain subject across time
+
+## 5.2 Individual Reference Panel
+
+
+```{r individual reference panel}
+# 获取所有样本ID
+subject_ids <- dimnames(result$p.ref)[[3]]
+
+# 创建一个空列表来存储所有样本的数据
+individual_data <- list()
+
+# 遍历所有样本ID，提取相应的数据并存储到列表中
+for (subject_id in subject_ids) {
+  # 找到当前样本ID在数组中的索引
+  subject_index <- which(dimnames(result$p.ref)[[3]] == subject_id)
+  
+  # 提取当前样本ID的数据
+  individual_data[[subject_id]] <- result$p.ref[, , subject_index]
+}
+
+# 查看列表的结构，以确认数据已经正确提取
+str(individual_data)
+
+# 打印前几个元素的名字，以确认命名是否正确
+names(individual_data)[1:5]
+length(individual_data)
+
+```
+
+# 6. Longitudinal study
+
+Here we plot the cell type proportion acquired by `imply` across time.
+
+## 6.1 Control Group
+
+### 6.1.1 Female
+
+#### Subject `101`
+
+```{r 101 longitudinal study}
+deconv_prop <- result$imply.prop
+
+subjects_to_extract <- 101
+
+# 从 sample_info_age 中提取符合 subject_id 的样本
+sample_info_filtered <- sample_info_age[sample_info_age$subject_ID %in% subjects_to_extract, ]
+# 获取这些样本的 ID
+filtered_sample_ids <- rownames(sample_info_filtered)
+
+# 从 deconv_prop 中提取符合样本 ID 的行
+deconv_prop_filtered <- deconv_prop[filtered_sample_ids, ]
+
+# 2. 将两个数据框合并
+deconv_prop_filtered$age <- sample_info_filtered$age
+deconv_prop_filtered$subject_ID <- sample_info_filtered$subject_ID
+
+deconv_prop_long <- melt(deconv_prop_filtered, id.vars = c("age", "subject_ID"), variable.name = "cell_type", value.name = "cell_proportion")
+
+# 3. 绘图
+ggplot(deconv_prop_long, aes(x = age, y = cell_proportion, color = cell_type)) +
+    geom_line() + 
+    geom_point() +
+    facet_wrap(~ subject_ID) +  # 根据 subject_ID 创建子图
+    labs(title = "Cell Type Proportion over Age",
+         x = "Age (Month)",
+         y = "Cell Type Proportion") +
+    theme_minimal() +
+    theme(legend.position = "bottom")
+```
+
+#### Subject `102`
+
+```{r 102 longitudinal study}
+
+subjects_to_extract <- 102
+
+# 从 sample_info_age 中提取符合 subject_id 的样本
+sample_info_filtered <- sample_info_age[sample_info_age$subject_ID %in% subjects_to_extract, ]
+# 获取这些样本的 ID
+filtered_sample_ids <- rownames(sample_info_filtered)
+
+# 从 deconv_prop 中提取符合样本 ID 的行
+deconv_prop_filtered <- deconv_prop[filtered_sample_ids, ]
+
+# 2. 将两个数据框合并
+deconv_prop_filtered$age <- sample_info_filtered$age
+deconv_prop_filtered$subject_ID <- sample_info_filtered$subject_ID
+
+deconv_prop_long <- melt(deconv_prop_filtered, id.vars = c("age", "subject_ID"), variable.name = "cell_type", value.name = "cell_proportion")
+
+# 3. 绘图
+ggplot(deconv_prop_long, aes(x = age, y = cell_proportion, color = cell_type)) +
+    geom_line() + 
+    geom_point() +
+    facet_wrap(~ subject_ID) +  # 根据 subject_ID 创建子图
+    labs(title = "Cell Type Proportion over Age",
+         x = "Age (Month)",
+         y = "Cell Type Proportion") +
+    theme_minimal() +
+    theme(legend.position = "bottom")
+```
+
+#### Subject `103`
+
+```{r 103 longitudinal study}
+
+subjects_to_extract <- 103
+
+# 从 sample_info_age 中提取符合 subject_id 的样本
+sample_info_filtered <- sample_info_age[sample_info_age$subject_ID %in% subjects_to_extract, ]
+# 获取这些样本的 ID
+filtered_sample_ids <- rownames(sample_info_filtered)
+
+# 从 deconv_prop 中提取符合样本 ID 的行
+deconv_prop_filtered <- deconv_prop[filtered_sample_ids, ]
+
+# 2. 将两个数据框合并
+deconv_prop_filtered$age <- sample_info_filtered$age
+deconv_prop_filtered$subject_ID <- sample_info_filtered$subject_ID
+
+deconv_prop_long <- melt(deconv_prop_filtered, id.vars = c("age", "subject_ID"), variable.name = "cell_type", value.name = "cell_proportion")
+
+# 3. 绘图
+ggplot(deconv_prop_long, aes(x = age, y = cell_proportion, color = cell_type)) +
+    geom_line() + 
+    geom_point() +
+    facet_wrap(~ subject_ID) +  # 根据 subject_ID 创建子图
+    labs(title = "Cell Type Proportion over Age",
+         x = "Age (Month)",
+         y = "Cell Type Proportion") +
+    theme_minimal() +
+    theme(legend.position = "bottom")
+```
+
+### 6.1.2 Male
+
+
+#### Subject `201`
+
+```{r 201 longitudinal study}
+
+subjects_to_extract <- 201
+
+# 从 sample_info_age 中提取符合 subject_id 的样本
+sample_info_filtered <- sample_info_age[sample_info_age$subject_ID %in% subjects_to_extract, ]
+# 获取这些样本的 ID
+filtered_sample_ids <- rownames(sample_info_filtered)
+
+# 从 deconv_prop 中提取符合样本 ID 的行
+deconv_prop_filtered <- deconv_prop[filtered_sample_ids, ]
+
+# 2. 将两个数据框合并
+deconv_prop_filtered$age <- sample_info_filtered$age
+deconv_prop_filtered$subject_ID <- sample_info_filtered$subject_ID
+
+deconv_prop_long <- melt(deconv_prop_filtered, id.vars = c("age", "subject_ID"), variable.name = "cell_type", value.name = "cell_proportion")
+
+# 3. 绘图
+ggplot(deconv_prop_long, aes(x = age, y = cell_proportion, color = cell_type)) +
+    geom_line() + 
+    geom_point() +
+    facet_wrap(~ subject_ID) +  # 根据 subject_ID 创建子图
+    labs(title = "Cell Type Proportion over Age",
+         x = "Age (Month)",
+         y = "Cell Type Proportion") +
+    theme_minimal() +
+    theme(legend.position = "bottom")
+```
+
+
+#### Subject `202`
+
+```{r 202 longitudinal study}
+
+subjects_to_extract <- 202
+
+# 从 sample_info_age 中提取符合 subject_id 的样本
+sample_info_filtered <- sample_info_age[sample_info_age$subject_ID %in% subjects_to_extract, ]
+# 获取这些样本的 ID
+filtered_sample_ids <- rownames(sample_info_filtered)
+
+# 从 deconv_prop 中提取符合样本 ID 的行
+deconv_prop_filtered <- deconv_prop[filtered_sample_ids, ]
+
+# 2. 将两个数据框合并
+deconv_prop_filtered$age <- sample_info_filtered$age
+deconv_prop_filtered$subject_ID <- sample_info_filtered$subject_ID
+
+deconv_prop_long <- melt(deconv_prop_filtered, id.vars = c("age", "subject_ID"), variable.name = "cell_type", value.name = "cell_proportion")
+
+# 3. 绘图
+ggplot(deconv_prop_long, aes(x = age, y = cell_proportion, color = cell_type)) +
+    geom_line() + 
+    geom_point() +
+    facet_wrap(~ subject_ID) +  # 根据 subject_ID 创建子图
+    labs(title = "Cell Type Proportion over Age",
+         x = "Age (Month)",
+         y = "Cell Type Proportion") +
+    theme_minimal() +
+    theme(legend.position = "bottom")
+```
+
+
+#### Subject `203`
+
+```{r 203 longitudinal study}
+
+subjects_to_extract <- 203
+
+# 从 sample_info_age 中提取符合 subject_id 的样本
+sample_info_filtered <- sample_info_age[sample_info_age$subject_ID %in% subjects_to_extract, ]
+# 获取这些样本的 ID
+filtered_sample_ids <- rownames(sample_info_filtered)
+
+# 从 deconv_prop 中提取符合样本 ID 的行
+deconv_prop_filtered <- deconv_prop[filtered_sample_ids, ]
+
+# 2. 将两个数据框合并
+deconv_prop_filtered$age <- sample_info_filtered$age
+deconv_prop_filtered$subject_ID <- sample_info_filtered$subject_ID
+
+deconv_prop_long <- melt(deconv_prop_filtered, id.vars = c("age", "subject_ID"), variable.name = "cell_type", value.name = "cell_proportion")
+
+# 3. 绘图
+ggplot(deconv_prop_long, aes(x = age, y = cell_proportion, color = cell_type)) +
+    geom_line() + 
+    geom_point() +
+    facet_wrap(~ subject_ID) +  # 根据 subject_ID 创建子图
+    labs(title = "Cell Type Proportion over Age",
+         x = "Age (Month)",
+         y = "Cell Type Proportion") +
+    theme_minimal() +
+    theme(legend.position = "bottom")
+```
+
+## 6.2 Case Group
+
+### 6.2.1 Female
+
+#### Subject `111`
+
+```{r 111 longitudinal study}
+
+subjects_to_extract <- 111
+
+# 从 sample_info_age 中提取符合 subject_id 的样本
+sample_info_filtered <- sample_info_age[sample_info_age$subject_ID %in% subjects_to_extract, ]
+# 获取这些样本的 ID
+filtered_sample_ids <- rownames(sample_info_filtered)
+
+# 从 deconv_prop 中提取符合样本 ID 的行
+deconv_prop_filtered <- deconv_prop[filtered_sample_ids, ]
+
+# 2. 将两个数据框合并
+deconv_prop_filtered$age <- sample_info_filtered$age
+deconv_prop_filtered$subject_ID <- sample_info_filtered$subject_ID
+
+deconv_prop_long <- melt(deconv_prop_filtered, id.vars = c("age", "subject_ID"), variable.name = "cell_type", value.name = "cell_proportion")
+
+# 3. 绘图
+ggplot(deconv_prop_long, aes(x = age, y = cell_proportion, color = cell_type)) +
+    geom_line() + 
+    geom_point() +
+    facet_wrap(~ subject_ID) +  # 根据 subject_ID 创建子图
+    labs(title = "Cell Type Proportion over Age",
+         x = "Age (Month)",
+         y = "Cell Type Proportion") +
+    theme_minimal() +
+    theme(legend.position = "bottom")
+```
+
+
+#### Subject `112`
+
+```{r 112 longitudinal study}
+
+subjects_to_extract <- 112
+
+# 从 sample_info_age 中提取符合 subject_id 的样本
+sample_info_filtered <- sample_info_age[sample_info_age$subject_ID %in% subjects_to_extract, ]
+# 获取这些样本的 ID
+filtered_sample_ids <- rownames(sample_info_filtered)
+
+# 从 deconv_prop 中提取符合样本 ID 的行
+deconv_prop_filtered <- deconv_prop[filtered_sample_ids, ]
+
+# 2. 将两个数据框合并
+deconv_prop_filtered$age <- sample_info_filtered$age
+deconv_prop_filtered$subject_ID <- sample_info_filtered$subject_ID
+
+deconv_prop_long <- melt(deconv_prop_filtered, id.vars = c("age", "subject_ID"), variable.name = "cell_type", value.name = "cell_proportion")
+
+# 3. 绘图
+ggplot(deconv_prop_long, aes(x = age, y = cell_proportion, color = cell_type)) +
+    geom_line() + 
+    geom_point() +
+    facet_wrap(~ subject_ID) +  # 根据 subject_ID 创建子图
+    labs(title = "Cell Type Proportion over Age",
+         x = "Age (Month)",
+         y = "Cell Type Proportion") +
+    theme_minimal() +
+    theme(legend.position = "bottom")
+```
+
+
+#### Subject `113`
+
+```{r 113 longitudinal study}
+
+subjects_to_extract <- 113
+
+# 从 sample_info_age 中提取符合 subject_id 的样本
+sample_info_filtered <- sample_info_age[sample_info_age$subject_ID %in% subjects_to_extract, ]
+# 获取这些样本的 ID
+filtered_sample_ids <- rownames(sample_info_filtered)
+
+# 从 deconv_prop 中提取符合样本 ID 的行
+deconv_prop_filtered <- deconv_prop[filtered_sample_ids, ]
+
+# 2. 将两个数据框合并
+deconv_prop_filtered$age <- sample_info_filtered$age
+deconv_prop_filtered$subject_ID <- sample_info_filtered$subject_ID
+
+deconv_prop_long <- melt(deconv_prop_filtered, id.vars = c("age", "subject_ID"), variable.name = "cell_type", value.name = "cell_proportion")
+
+# 3. 绘图
+ggplot(deconv_prop_long, aes(x = age, y = cell_proportion, color = cell_type)) +
+    geom_line() + 
+    geom_point() +
+    facet_wrap(~ subject_ID) +  # 根据 subject_ID 创建子图
+    labs(title = "Cell Type Proportion over Age",
+         x = "Age (Month)",
+         y = "Cell Type Proportion") +
+    theme_minimal() +
+    theme(legend.position = "bottom")
+```
+
+
+### 6.2.2 Male
+
+#### Subject `211`
+
+```{r 211 longitudinal study}
+
+subjects_to_extract <- 211
+
+# 从 sample_info_age 中提取符合 subject_id 的样本
+sample_info_filtered <- sample_info_age[sample_info_age$subject_ID %in% subjects_to_extract, ]
+# 获取这些样本的 ID
+filtered_sample_ids <- rownames(sample_info_filtered)
+
+# 从 deconv_prop 中提取符合样本 ID 的行
+deconv_prop_filtered <- deconv_prop[filtered_sample_ids, ]
+
+# 2. 将两个数据框合并
+deconv_prop_filtered$age <- sample_info_filtered$age
+deconv_prop_filtered$subject_ID <- sample_info_filtered$subject_ID
+
+deconv_prop_long <- melt(deconv_prop_filtered, id.vars = c("age", "subject_ID"), variable.name = "cell_type", value.name = "cell_proportion")
+
+# 3. 绘图
+ggplot(deconv_prop_long, aes(x = age, y = cell_proportion, color = cell_type)) +
+    geom_line() + 
+    geom_point() +
+    facet_wrap(~ subject_ID) +  # 根据 subject_ID 创建子图
+    labs(title = "Cell Type Proportion over Age",
+         x = "Age (Month)",
+         y = "Cell Type Proportion") +
+    theme_minimal() +
+    theme(legend.position = "bottom")
+```
+
+
+#### Subject `212`
+
+```{r 212 longitudinal study}
+
+subjects_to_extract <- 212
+
+# 从 sample_info_age 中提取符合 subject_id 的样本
+sample_info_filtered <- sample_info_age[sample_info_age$subject_ID %in% subjects_to_extract, ]
+# 获取这些样本的 ID
+filtered_sample_ids <- rownames(sample_info_filtered)
+
+# 从 deconv_prop 中提取符合样本 ID 的行
+deconv_prop_filtered <- deconv_prop[filtered_sample_ids, ]
+
+# 2. 将两个数据框合并
+deconv_prop_filtered$age <- sample_info_filtered$age
+deconv_prop_filtered$subject_ID <- sample_info_filtered$subject_ID
+
+deconv_prop_long <- melt(deconv_prop_filtered, id.vars = c("age", "subject_ID"), variable.name = "cell_type", value.name = "cell_proportion")
+
+# 3. 绘图
+ggplot(deconv_prop_long, aes(x = age, y = cell_proportion, color = cell_type)) +
+    geom_line() + 
+    geom_point() +
+    facet_wrap(~ subject_ID) +  # 根据 subject_ID 创建子图
+    labs(title = "Cell Type Proportion over Age",
+         x = "Age (Month)",
+         y = "Cell Type Proportion") +
+    theme_minimal() +
+    theme(legend.position = "bottom")
+```
+
+
+#### Subject `213`
+
+```{r 213 longitudinal study}
+
+subjects_to_extract <- 213
+
+# 从 sample_info_age 中提取符合 subject_id 的样本
+sample_info_filtered <- sample_info_age[sample_info_age$subject_ID %in% subjects_to_extract, ]
+# 获取这些样本的 ID
+filtered_sample_ids <- rownames(sample_info_filtered)
+
+# 从 deconv_prop 中提取符合样本 ID 的行
+deconv_prop_filtered <- deconv_prop[filtered_sample_ids, ]
+
+# 2. 将两个数据框合并
+deconv_prop_filtered$age <- sample_info_filtered$age
+deconv_prop_filtered$subject_ID <- sample_info_filtered$subject_ID
+
+deconv_prop_long <- melt(deconv_prop_filtered, id.vars = c("age", "subject_ID"), variable.name = "cell_type", value.name = "cell_proportion")
+
+# 3. 绘图
+ggplot(deconv_prop_long, aes(x = age, y = cell_proportion, color = cell_type)) +
+    geom_line() + 
+    geom_point() +
+    facet_wrap(~ subject_ID) +  # 根据 subject_ID 创建子图
+    labs(title = "Cell Type Proportion over Age",
+         x = "Age (Month)",
+         y = "Cell Type Proportion") +
+    theme_minimal() +
+    theme(legend.position = "bottom")
+```
+
